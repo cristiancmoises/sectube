@@ -1,0 +1,31 @@
+# We do NOT build inside Docker anymore, so:
+#  - node_modules is not needed (and must not ship: huge + host-specific)
+#  - dist/ IS needed — that's the whole runtime payload
+node_modules
+.vite
+.git
+.github
+.gitignore
+.dockerignore
+Dockerfile
+Dockerfile.full-build
+docker-compose.yml
+.env
+.env.*
+!.env.example
+README.md
+*.md
+coverage
+.vscode
+.idea
+.DS_Store
+npm-debug.log*
+*.log
+src
+public
+index.html
+vite.config.js
+eslint.config.js
+package.json
+package-lock.json
+scripts

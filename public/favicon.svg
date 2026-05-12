@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="8" fill="#000000"/>
+  <rect x="2" y="2" width="60" height="60" rx="6" fill="none" stroke="#00e5ff" stroke-width="1.5" opacity="0.4"/>
+  <text x="32" y="34" font-family="ui-monospace, 'JetBrains Mono', monospace" font-weight="700"
+        font-size="20" letter-spacing="-0.05em" fill="#00e5ff" text-anchor="middle" dominant-baseline="middle">ST</text>
+  <line x1="14" y1="48" x2="50" y2="48" stroke="#00e5ff" stroke-width="1.5" opacity="0.7"/>
+</svg>

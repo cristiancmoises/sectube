@@ -1,0 +1,51 @@
+services:
+  sectube:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sectube:latest
+    container_name: sectube
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      SERVER_PORT: "8080"
+      # Injected into the rendered nginx config at boot. Never baked into the image.
+      RAPIDAPI_KEY: "${RAPIDAPI_KEY:-}"
+      RAPIDAPI_HOST: "${RAPIDAPI_HOST:-youtube-v31.p.rapidapi.com}"
+      NGINX_RESOLVERS: "${NGINX_RESOLVERS:-1.1.1.1 8.8.8.8 9.9.9.9}"
+    env_file:
+      - path: .env
+        required: false
+    dns:
+      - ${DOCKER_DNS:-1.1.1.1}
+      - 8.8.8.8
+      - 9.9.9.9
+    # --- Hardening ----------------------------------------------------------
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    cap_drop:
+      - ALL
+    # security_opt: no-new-privileges removed — incompatible with the
+    # nginx-unprivileged base on some kernels. See AUDIT.md.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

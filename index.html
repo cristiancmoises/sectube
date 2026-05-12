@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/sec-logo.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/sec-logo.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="SecTube — a public YouTube browser. No login required." />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    <!-- Perf: warm TCP+TLS to YouTube embed origins before the user clicks a video. -->
+    <link rel="preconnect" href="https://www.youtube-nocookie.com" crossorigin />
+    <link rel="preconnect" href="https://www.youtube.com" crossorigin />
+    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
+    <link rel="dns-prefetch" href="https://yt3.ggpht.com" />
+    <link rel="dns-prefetch" href="https://yt3.googleusercontent.com" />
+    <title>SecTube</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run SecTube.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/index.jsx"></script>
+  </body>
+</html>

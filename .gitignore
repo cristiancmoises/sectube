@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.vite/
+
+# Secrets — NEVER commit these.
+.env
+.env.local
+.env.*.local
+# Piped operator-filled config contains the postgres password.
+piped-config/config.properties
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Coverage / test output
+coverage/
+.nyc_output/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Lockfile leftovers — keep package-lock.json, drop yarn.lock (we use npm).
+yarn.lock
