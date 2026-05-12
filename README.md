@@ -1,6 +1,6 @@
 # SecTube v3
 
-A self-hosted YouTube browser. Multi-theme tech aesthetic (5 palettes), Japan-first defaults, country selector, custom YouTube IFrame API player with cyan-themed overlay controls, no login. React 18 SPA served by hardened nginx, RapidAPI YouTube proxy with the key injected server-side so it never reaches the browser.
+A self-hosted YouTube browser. Multi-theme tech aesthetic (5 palettes), Japan-first defaults, country selector, custom YouTube IFrame API player with cyan-themed overlay controls, no login. React 18 SPA served by hardened nginx, **Google YouTube Data API v3** with the key injected server-side so it never reaches the browser.
 
 ## Quickstart
 
@@ -8,71 +8,66 @@ A self-hosted YouTube browser. Multi-theme tech aesthetic (5 palettes), Japan-fi
 git clone <your-fork>
 cd sectube
 cp .env.example .env
-# Edit .env — paste your RAPIDAPI_KEY (free tier at https://rapidapi.com/ytdlfree/api/youtube-v31)
+# Edit .env — paste your GOOGLE_API_KEY (see setup below)
 docker compose up -d
 ```
 
 Open <http://localhost:8080>. Click a category — Japanese videos load in cyan-on-black.
 
+## Google API key setup (5 minutes, free, no credit card)
+
+1. Open <https://console.cloud.google.com>
+2. Click the project selector at the top → **New Project** → name it whatever (e.g. "sectube") → **Create**
+3. With the project selected, search the top bar for **YouTube Data API v3** → click the result → **Enable**
+4. Sidebar → **APIs & Services** → **Credentials** → **Create Credentials** → **API key**
+5. Copy the key (looks like `AIzaSy…`)
+6. **Strongly recommended:** click the key in the credentials list → **API restrictions** → **Restrict key** → check **YouTube Data API v3** → **Save**. This limits the blast radius if the key ever leaks — it can only call YouTube, not your billing or other Google APIs.
+7. Paste the key into `.env` as `GOOGLE_API_KEY=AIzaSy…`
+8. `docker compose up -d`
+
+**Free quota:** 10,000 units/day. Each `/search` call costs 100 units → ~100 searches/day. Each `/videos` call costs 1 unit. Quota resets at midnight Pacific time. No billing. No credit card required.
+
 ## Stack
 
 ```
    browser ─▶ sectube (nginx + React SPA)
-                  │  /api/* — key injected server-side
+                  │  /api/* — key injected server-side via ?key=…
                   ▼
-              RapidAPI (youtube-v31)
+              Google YouTube Data API v3
 ```
 
-Single container, ~50 MB image, runs as UID 101, read-only rootfs, all caps dropped.
+Single container, ~50 MB image, UID 101, read-only rootfs, all caps dropped.
 
 ## UI/UX
 
-- **Animated wordmark.** Typewriter effect on first visit per browser session; underline sweep on subsequent visits. Respects `prefers-reduced-motion`.
-- **Cyan/black palette.** AAA contrast throughout (verified). Magenta `#ff4081` reserved for errors so they read distinctly.
-- **Monospace numerics.** JetBrains Mono for view counts, durations, statistics, badges.
-- **Subtle scanline overlay.** Fixed, doesn't fight legibility.
-- **Skeleton loaders.** Match the real VideoCard shape so the layout doesn't jump.
-- **Responsive grid.** Single-column on mobile, fluid grid on tablet/desktop via CSS Grid `auto-fill minmax(280px, 1fr)`.
-- **Backdrop-blur sticky navbar.**
-
-## Themes
-
-Five themes ship: **SecurityOps** (default cyan/black), **Crimson** (red/black), **Synthwave** (magenta/violet), **Matrix** (phosphor green), **Mono** (white-on-black). Pick via the palette icon in the navbar. Choice persists in localStorage as `sectube.theme`.
-
-To add a new theme: append an entry to `themes` in `src/theme.js` AND a matching `[data-theme="…"]` block in `src/index.css`. Rebuild the SPA.
-
-## Country / region
-
-Twelve regions in the navbar dropdown (JP US GB DE FR BR IN KR ES IT CA AU). Default is JP. Choice persists in localStorage as `sectube.region`. Every search request picks up the current selection live — no reload needed.
-
-## Custom player
-
-Watch pages use the YouTube IFrame API (not a plain iframe) with our own cyan-themed overlay controls: play/pause, scrubber, volume, fullscreen, picture-in-picture (best-effort, opens YouTube), open-on-YouTube. YouTube's logo still appears on the embed itself (their requirement). Player auto-hides controls on inactivity during playback.
-
-## Channel pages
-
-Tabs: **Videos | Shorts | Live | Playlists**. Each tab paginates via "Load more" up to YouTube's ~500-item search cap (Google-imposed, not ours). Shorts detected by portrait-aspect thumbnail (best heuristic available from the API).
+- Animated SecTube wordmark — typewriter on first session visit, underline sweep otherwise. Respects `prefers-reduced-motion`.
+- Custom navbar logo from `/sec-logo.svg`
+- Five swappable themes: SecurityOps (cyan, default), Crimson, Synthwave, Matrix, Mono. Persisted.
+- Country selector with 12 regions (JP default). Persisted. Live refetch on change.
+- 24 categories including Tech, News, JP-News (`日本 ニュース`), Anime, Science, Documentary, Food, Travel.
+- Custom YouTube IFrame API player with cyan-themed overlay controls.
+- Channel pages with tabs: Videos | Shorts | Live | Playlists.
+- Skeleton loaders match VideoCard shape.
+- AAA contrast across all themes.
+- JetBrains Mono numerics, tabular figures throughout.
+- Responsive — single column under 600px, fluid grid above.
+- Subtle scanline overlay.
 
 ## Configuration
 
-`.env` is the only file you edit. Required: `RAPIDAPI_KEY`. Defaults below.
+`.env` is the only file you edit. See `.env.example` for the full list.
 
 ```env
-RAPIDAPI_KEY=         # required for /api to work
-RAPIDAPI_HOST=youtube-v31.p.rapidapi.com
+GOOGLE_API_KEY=        # required
+GOOGLE_API_HOST=youtube.googleapis.com
 HOST_PORT=8080
-# DNS overrides for strict-killswitch VPNs:
-# DOCKER_DNS=10.64.0.1
-# NGINX_RESOLVERS=10.64.0.1
 ```
-
-To change Japan-first defaults: edit `DEFAULT_REGION` and `DEFAULT_LANGUAGE` in `src/services/region.js`, then `./scripts/build.sh && docker compose build sectube && docker compose up -d`.
 
 ## Deploying behind Nginx Proxy Manager / Caddy / Traefik
 
 `sectube` listens on `8080` inside its container, published to `${HOST_PORT}:8080`. Point your reverse proxy at `http://<host>:<HOST_PORT>` and let it handle TLS.
 
-SecTube's nginx already sets HSTS-friendly security headers (CSP, X-Frame-Options DENY, Referrer-Policy) and rate-limits `/api/*` to 10 r/s per IP.
+The container's nginx already sets CSP, X-Frame-Options DENY, Referrer-Policy, and rate-limits `/api/*` to 10 r/s per IP.
 
 ## Updating
 
@@ -80,19 +75,29 @@ SecTube's nginx already sets HSTS-friendly security headers (CSP, X-Frame-Option
 docker compose pull && docker compose build --no-cache && docker compose up -d
 ```
 
-For SPA-only changes (no Docker rebuild needed):
+For SPA-only changes:
 ```bash
-./scripts/build.sh   # rebuilds dist/
-docker compose up -d --force-recreate sectube
+./scripts/build.sh && docker compose up -d --force-recreate sectube
 ```
 
 ## Troubleshooting
 
-**Page loads but every category shows "API access denied"** — RAPIDAPI_KEY missing or wrong. Get one at <https://rapidapi.com/ytdlfree/api/youtube-v31>, paste into `.env`, then `docker compose up -d`.
+**Every API call returns "Daily API quota reached"** — 10,000 units/day is gone. Either wait for midnight Pacific reset, or in Google Cloud Console → APIs & Services → YouTube Data API v3 → Quotas, you can request more (free, takes a few days for approval, or instant if you enable billing on the project — Google gives $300 free credit).
+
+**"API access denied"** — `GOOGLE_API_KEY` missing, wrong, or has IP/referrer restrictions blocking your server. Re-check the key, and if you restricted by referrer/IP, either remove that restriction or add your domain/IP to the allowed list.
 
 **Mullvad/strict VPN — DNS errors in logs** — set `DOCKER_DNS=10.64.0.1` and `NGINX_RESOLVERS=10.64.0.1` in `.env`, ensure Mullvad's "Local network sharing" is on, then `docker compose up -d`.
 
-**Build fails with `npm error Exit handler never called!`** — Docker memory too low. Raise to 4GB and rebuild with `--no-cache`. See `AUDIT.md` for details.
+**Build fails with `npm error Exit handler never called!`** — Docker memory too low. Raise to 4GB and rebuild with `--no-cache`.
+
+## Why Google API instead of RapidAPI
+
+- Free, no credit card, no quota anxiety beyond 10k/day
+- Cuts out the RapidAPI middleman (their API was just a proxy of this one)
+- No surprise overage charges
+- Direct Google relationship — supportable
+
+Trade-off: quota is daily, not monthly. If your launch goes viral and burns quota in an hour, the site shows the friendly "quota reached" message until midnight Pacific. For most personal/small-public deployments this is fine.
 
 ## Security & audit
 
@@ -100,4 +105,4 @@ See `SECURITY.md` for the threat model. See `AUDIT.md` for the most recent depen
 
 ## License
 
-GPLV3.
+GPLv3.

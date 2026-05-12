@@ -11,8 +11,8 @@ services:
     environment:
       SERVER_PORT: "8080"
       # Injected into the rendered nginx config at boot. Never baked into the image.
-      RAPIDAPI_KEY: "${RAPIDAPI_KEY:-}"
-      RAPIDAPI_HOST: "${RAPIDAPI_HOST:-youtube-v31.p.rapidapi.com}"
+      GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+      GOOGLE_API_HOST: "${GOOGLE_API_HOST:-youtube.googleapis.com}"
       NGINX_RESOLVERS: "${NGINX_RESOLVERS:-1.1.1.1 8.8.8.8 9.9.9.9}"
     env_file:
       - path: .env
@@ -29,8 +29,7 @@ services:
       - /var/run
     cap_drop:
       - ALL
-    # security_opt: no-new-privileges removed — incompatible with the
-    # nginx-unprivileged base on some kernels. See AUDIT.md.
+    # security_opt: no-new-privileges removed — see AUDIT.md.
     deploy:
       resources:
         limits:

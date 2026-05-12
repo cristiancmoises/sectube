@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Same-origin /api. nginx injects the RapidAPI key server-side; the browser
-// never sees it. See docker/nginx/nginx.conf.template.
+// Same-origin /api. nginx injects ?key=… server-side; the browser never sees
+// the API key. See docker/nginx/nginx.conf.template.
 const API_BASE = '/api';
 
 const http = axios.create({
@@ -10,7 +10,9 @@ const http = axios.create({
 });
 
 // --- In-memory cache (URL -> { data, expiresAt }) ----------------------------
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes is fine — quota matters
+// Caching matters more with Google's quota: search costs 100 units, so a
+// repeated search (back navigation, etc.) without cache wastes a lot of quota.
+const CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map();
 
 function cacheGet(key) {
@@ -29,18 +31,57 @@ function cacheSet(key, data) {
 }
 
 export class ApiError extends Error {
-  constructor(message, { status, cause } = {}) {
+  constructor(message, { status, cause, googleReason } = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.cause = cause;
+    this.googleReason = googleReason;
   }
 }
 
 /**
- * Fetch from the proxied YouTube metadata API.
- * Components expect YouTube-Data-v3-shaped JSON; RapidAPI returns it
- * natively, so no translation layer needed.
+ * Extract Google's structured error reason from a 4xx response.
+ * Format: { error: { code, message, errors: [{ reason, ... }] } }
+ */
+function googleReasonOf(err) {
+  try {
+    const errs = err?.response?.data?.error?.errors;
+    if (Array.isArray(errs) && errs[0]?.reason) return errs[0].reason;
+  } catch { /* ignore */ }
+  return null;
+}
+
+/**
+ * Map Google API error codes to user-friendly messages.
+ * 403 quotaExceeded   → daily quota gone, resets midnight Pacific
+ * 403 keyInvalid      → key missing or wrong
+ * 403 keyExpired      → key disabled
+ * 403 ipRefererBlocked→ API key has a restriction that blocks this origin
+ * 400 badRequest      → malformed query
+ * 404                 → not found
+ * 5xx                 → Google's problem
+ */
+function friendlyMessageFor(status, reason) {
+  if (status === 403) {
+    if (reason === 'quotaExceeded' || reason === 'rateLimitExceeded')
+      return 'Daily API quota reached. Resets at midnight Pacific time.';
+    if (reason === 'keyInvalid' || reason === 'keyExpired')
+      return 'API access denied. The server admin needs to check the API key.';
+    if (reason === 'ipRefererBlocked')
+      return 'API key has a referrer/IP restriction that blocks this server.';
+    return 'API access denied. The server admin needs to check the API key.';
+  }
+  if (status === 429) return 'Rate limit reached. Try again in a moment.';
+  if (status === 400) return 'Invalid request.';
+  if (status === 404) return 'Not found.';
+  if (status >= 500)  return 'The upstream service is unavailable right now.';
+  return 'Failed to load. Check your connection.';
+}
+
+/**
+ * Fetch from the proxied YouTube Data API v3.
+ * Returns response in YouTube's native shape — no translation needed.
  *
  * @param {string} path  e.g. "search?part=snippet&q=New"
  * @param {{ signal?: AbortSignal, noCache?: boolean }} [opts]
@@ -57,16 +98,10 @@ export async function fetchApi(path, opts = {}) {
   } catch (err) {
     if (axios.isCancel(err) || err.name === 'CanceledError') throw err;
     const status = err?.response?.status;
-    const msg =
-      status === 429 ? 'Rate limit reached. Try again in a moment.'
-        : status === 401 || status === 403
-          ? 'API access denied. The server admin needs to set RAPIDAPI_KEY.'
-          : status === 404 ? 'Not found.'
-            : status >= 500 ? 'The upstream service is unavailable right now.'
-              : 'Failed to load. Check your connection.';
-    throw new ApiError(msg, { status, cause: err });
+    const reason = googleReasonOf(err);
+    throw new ApiError(friendlyMessageFor(status, reason), { status, cause: err, googleReason: reason });
   }
 }
 
-// Back-compat shim for any older callsites.
+// Back-compat shim.
 export const ApiService = { fetching: (url) => fetchApi(url) };

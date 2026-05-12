@@ -1,13 +1,13 @@
 # nginx.conf.template — rendered via sed at container boot.
-# Env vars available: ${RAPIDAPI_KEY} ${RAPIDAPI_HOST} ${SERVER_PORT} ${NGINX_RESOLVERS}
+# Env vars: ${GOOGLE_API_KEY} ${GOOGLE_API_HOST} ${SERVER_PORT} ${NGINX_RESOLVERS}
 
 # Per-IP rate limit on /api/* — quota protection + cheap DDoS resistance.
 limit_req_zone $binary_remote_addr zone=api_zone:10m rate=10r/s;
 limit_req_status 429;
 
-# Runtime DNS resolution for upstream. Using a variable in proxy_pass forces
-# nginx to resolve at request time (via this `resolver`) instead of at
-# config-parse time — survives DNS hiccups without crashing on boot.
+# Runtime DNS resolution for upstream. Variable in proxy_pass forces resolve
+# at request time (via this `resolver`) instead of at config-parse time —
+# survives DNS hiccups without crashing on boot.
 resolver ${NGINX_RESOLVERS} valid=60s ipv6=off;
 resolver_timeout 5s;
 
@@ -24,7 +24,7 @@ server {
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
-    # CSP: allow self, MUI inline styles, YouTube iframe embeds, YouTube CDN images.
+    # CSP: allow self + YouTube IFrame API script + YouTube embed origins.
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://yt3.ggpht.com https://yt3.googleusercontent.com; font-src 'self' data:; media-src 'self' blob:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none';" always;
 
     # ---- Compression -------------------------------------------------------
@@ -40,28 +40,37 @@ server {
 
     client_max_body_size 128k;
 
-    # ---- /api/*  ->  https://${RAPIDAPI_HOST}/*  ---------------------------
-    # Regex location captures path so we don't need rewrite ... break (which
-    # would stop `set` from running and leave $upstream_host empty).
+    # ---- /api/*  ->  https://${GOOGLE_API_HOST}/youtube/v3/*  --------------
+    # Regex location captures path. We inject `key=…` as a query parameter
+    # via `args` because Google's API authenticates via query string, not
+    # a header.
     location ~ ^/api/(?<proxy_path>.*)$ {
         limit_req zone=api_zone burst=20 nodelay;
 
         # $upstream_host as variable forces runtime DNS resolution.
-        set $upstream_host "${RAPIDAPI_HOST}";
-        proxy_pass https://$upstream_host/$proxy_path$is_args$args;
+        set $upstream_host "${GOOGLE_API_HOST}";
+
+        # Append `key=…` to the upstream args. If the request already has
+        # query params we use `&` separator, otherwise `?`. Nginx exposes
+        # this via $is_args.
+        set $upstream_args "${args}";
+        if ($is_args = "") {
+            set $upstream_args "key=${GOOGLE_API_KEY}";
+        }
+        if ($is_args = "?") {
+            set $upstream_args "${args}&key=${GOOGLE_API_KEY}";
+        }
+        proxy_pass https://$upstream_host/youtube/v3/$proxy_path?$upstream_args;
         proxy_ssl_server_name on;
         proxy_ssl_name $upstream_host;
         proxy_ssl_verify on;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 
-        # Key injection. Browser never sees it.
+        # Minimal headers. Google doesn't require auth headers — the key is
+        # in the URL. We strip the browser-side stuff for safety.
         proxy_set_header Host $upstream_host;
-        proxy_set_header X-RapidAPI-Key "${RAPIDAPI_KEY}";
-        proxy_set_header X-RapidAPI-Host $upstream_host;
         proxy_set_header Accept "application/json";
-        proxy_set_header User-Agent "sectube/2.0";
-
-        # Strip browser-side auth so we don't leak it upstream.
+        proxy_set_header User-Agent "sectube/3.0";
         proxy_set_header Cookie "";
         proxy_set_header Authorization "";
 
@@ -71,9 +80,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Connection "";
 
-        # Hide upstream-specific headers from the browser.
-        proxy_hide_header X-RapidAPI-Region;
-        proxy_hide_header X-RapidAPI-Version;
+        # Don't pass Set-Cookie back to the browser.
         proxy_hide_header Set-Cookie;
     }
 

@@ -36,7 +36,7 @@ export function ErrorPanel({ error, onRetry }) {
         </Typography>
         {isKeyIssue && (
           <Typography variant="body2" sx={{ color: 'var(--c-text-dim)', textAlign: 'center', maxWidth: 420 }}>
-            The site admin needs to set <code>RAPIDAPI_KEY</code> in <code>.env</code> and restart the container.
+            The site admin needs to set <code>GOOGLE_API_KEY</code> in <code>.env</code> and restart the container.
           </Typography>
         )}
         {onRetry && (
