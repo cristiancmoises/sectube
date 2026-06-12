@@ -2,11 +2,11 @@
 # =========================================================================
 # Stage 1: build the React bundle.
 # =========================================================================
-# node:22-slim (Debian) rather than -alpine:
+# node:26-slim (Debian) rather than -alpine:
 #  - glibc handles native binaries (rolldown, esbuild) more predictably than musl
 #  - fewer npm "Exit handler never called!" crashes under memory pressure
 # The builder stage is discarded, so the extra ~150MB never ships.
-FROM node:22-slim AS builder
+FROM node:26-slim AS builder
 
 WORKDIR /app
 
@@ -43,7 +43,7 @@ RUN npm run build
 # We deliberately do NOT `apk add` anything — the base image already has
 # everything we need (nginx, ca-certificates, BusyBox's sed/wget), so the
 # image build has zero network dependencies beyond the base pull itself.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runner
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runner
 
 USER root
 

@@ -9,13 +9,13 @@
 # The build now happens outside Docker:
 #   - If you have Node on the host:      npm ci && npm run build
 #   - If you don't:                      ./scripts/build.sh  (runs a one-off
-#                                        node:22-slim container to build,
+#                                        node:26-slim container to build,
 #                                        outputs to ./dist on your host)
 #
 # Either way, `dist/` must exist before `docker compose build`.
 # If you WANT the full in-image build, use Dockerfile.full-build instead.
 # =========================================================================
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 
 USER root
 
