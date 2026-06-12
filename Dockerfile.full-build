@@ -43,7 +43,7 @@ RUN npm run build
 # We deliberately do NOT `apk add` anything — the base image already has
 # everything we need (nginx, ca-certificates, BusyBox's sed/wget), so the
 # image build has zero network dependencies beyond the base pull itself.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runner
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runner
 
 USER root
 

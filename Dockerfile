@@ -15,7 +15,7 @@
 # Either way, `dist/` must exist before `docker compose build`.
 # If you WANT the full in-image build, use Dockerfile.full-build instead.
 # =========================================================================
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 
 USER root
 
