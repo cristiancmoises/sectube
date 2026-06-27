@@ -12,6 +12,18 @@ const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 // isn't always available at module-load time.
 const STATE = { UNSTARTED: -1, ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 };
 
+// Persist volume/mute across videos and sessions (no quota, pure UX).
+const VOL_KEY = 'sectube.volume';
+const MUTE_KEY = 'sectube.muted';
+function loadVol() {
+  try { const v = Number(localStorage.getItem(VOL_KEY)); return Number.isFinite(v) && v >= 0 && v <= 100 ? v : null; }
+  catch { return null; }
+}
+function loadMuted() { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; } }
+function saveVol(v) { try { localStorage.setItem(VOL_KEY, String(v)); } catch { /* private mode */ } }
+function saveMuted(m) { try { localStorage.setItem(MUTE_KEY, m ? '1' : '0'); } catch { /* private mode */ } }
+const clampVol = (v) => Math.max(0, Math.min(100, Math.round(v)));
+
 function fmt(t) {
   if (!Number.isFinite(t)) return '0:00';
   const s = Math.floor(t % 60);
@@ -22,11 +34,12 @@ function fmt(t) {
 }
 
 export default function Player({ videoId }) {
-  const containerId = `yt-player-${videoId || 'none'}`;
   const wrapRef = useRef(null);
+  const hostRef = useRef(null);   // React-owned div; YT's iframe lives INSIDE it
   const playerRef = useRef(null);
   const tickRef = useRef(null);
   const hideTimerRef = useRef(null);
+  const retryRef = useRef(0);     // spurious-error-150 retry counter
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -44,13 +57,28 @@ export default function Player({ videoId }) {
   // ---- Initialize YT player ------------------------------------------------
   useEffect(() => {
     if (!safeId) return undefined;
+    const host = hostRef.current;
+    if (!host) return undefined;
     let cancelled = false;
     let p = null;
+    retryRef.current = 0;
+
+    // Create a throwaway node OUTSIDE React's control for the YT API to replace
+    // with its <iframe>. React owns `host` (which has no JSX children), so it
+    // never tries to reconcile/remove the YT-mutated node — this is what avoids
+    // the "removeChild: node is not a child" crash when the player errors or the
+    // route unmounts. (Passing a React-rendered element to new YT.Player() lets
+    // YT replace a node React still thinks it owns → crash.)
+    host.textContent = '';
+    const mount = document.createElement('div');
+    mount.style.width = '100%';
+    mount.style.height = '100%';
+    host.appendChild(mount);
 
     loadYouTubeIframeAPI()
       .then((YT) => {
         if (cancelled) return;
-        p = new YT.Player(containerId, {
+        p = new YT.Player(mount, {
           videoId: safeId,
           host: 'https://www.youtube-nocookie.com',
           playerVars: {
@@ -67,8 +95,10 @@ export default function Player({ videoId }) {
               if (cancelled) return;
               setReady(true);
               setDuration(p.getDuration() || 0);
-              setVolume(p.getVolume());
-              setMuted(p.isMuted());
+              // Restore the viewer's last volume/mute instead of YT's default.
+              const sv = loadVol();
+              if (sv != null) { p.setVolume(sv); setVolume(sv); } else { setVolume(p.getVolume()); }
+              if (loadMuted()) { p.mute(); setMuted(true); } else { setMuted(p.isMuted()); }
             },
             onStateChange: (e) => {
               if (cancelled) return;
@@ -81,8 +111,19 @@ export default function Player({ videoId }) {
             onError: (e) => {
               if (cancelled) return;
               const code = e.data;
+              // 101/150 ("embedding disabled") is frequently a spurious first-load
+              // hiccup on videos that are actually embeddable — retry a couple of
+              // times before giving up so we don't wrongly block playable videos.
+              if ((code === 101 || code === 150) && retryRef.current < 2) {
+                retryRef.current += 1;
+                setTimeout(() => {
+                  if (cancelled) return;
+                  try { p.loadVideoById(safeId); } catch { /* ignore */ }
+                }, 700);
+                return;
+              }
               const msg = code === 100 ? 'Video not found or made private.'
-                       : code === 101 || code === 150 ? 'Embedding disabled by uploader.'
+                       : code === 101 || code === 150 ? 'Embedding disabled by the uploader. Open it on YouTube instead.'
                        : code === 2 ? 'Invalid video id.'
                        : 'Playback error.';
               setError(msg);
@@ -107,8 +148,11 @@ export default function Player({ videoId }) {
       clearInterval(tickRef.current);
       try { playerRef.current?.destroy(); } catch { /* ignore */ }
       playerRef.current = null;
+      // Drop any iframe YT left behind. Safe because React tracks no children
+      // for `host`, so emptying it is invisible to the reconciler.
+      try { host.textContent = ''; } catch { /* ignore */ }
     };
-  }, [safeId, containerId]);
+  }, [safeId]);
 
   // ---- Fullscreen tracking -------------------------------------------------
   useEffect(() => {
@@ -128,6 +172,64 @@ export default function Player({ videoId }) {
 
   useEffect(() => { poke(); }, [poke, playing]);
 
+  // ---- Keyboard shortcuts --------------------------------------------------
+  // Standard player keys, ignored while typing in a field. Reads live state
+  // from the YT API so there are no stale-closure surprises.
+  useEffect(() => {
+    function onKey(e) {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const p = playerRef.current;
+      if (!p || typeof p.getCurrentTime !== 'function') return;
+      const dur = p.getDuration?.() || 0;
+      const cur = p.getCurrentTime?.() || 0;
+      const seekBy = (d) => { const nt = Math.max(0, Math.min(dur || cur + d, cur + d)); p.seekTo(nt, true); setCurrent(nt); poke(); };
+      const volBy = (d) => {
+        const v = clampVol((p.getVolume?.() || 0) + d);
+        p.setVolume(v); setVolume(v); saveVol(v);
+        if (v > 0 && p.isMuted?.()) { p.unMute(); setMuted(false); saveMuted(false); }
+        poke();
+      };
+      switch (e.key) {
+        case ' ': case 'k': {
+          e.preventDefault();
+          const st = p.getPlayerState?.();
+          if (st === STATE.ENDED) { p.seekTo(0, true); p.playVideo(); }
+          else if (st === STATE.PLAYING) p.pauseVideo();
+          else p.playVideo();
+          poke();
+          break;
+        }
+        case 'ArrowLeft':  e.preventDefault(); seekBy(-5);  break;
+        case 'ArrowRight': e.preventDefault(); seekBy(5);   break;
+        case 'j': seekBy(-10); break;
+        case 'l': seekBy(10);  break;
+        case 'ArrowUp':   e.preventDefault(); volBy(5);  break;
+        case 'ArrowDown': e.preventDefault(); volBy(-5); break;
+        case 'm':
+          if (p.isMuted?.()) { p.unMute(); setMuted(false); saveMuted(false); }
+          else { p.mute(); setMuted(true); saveMuted(true); }
+          poke();
+          break;
+        case 'f': {
+          const el = wrapRef.current;
+          if (!el) break;
+          if (!document.fullscreenElement) el.requestFullscreen?.().catch(() => {});
+          else document.exitFullscreen?.().catch(() => {});
+          break;
+        }
+        default:
+          if (e.key >= '0' && e.key <= '9' && dur) {
+            e.preventDefault();
+            const nt = (Number(e.key) / 10) * dur;
+            p.seekTo(nt, true); setCurrent(nt); poke();
+          }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [poke]);
+
   // ---- Controls ------------------------------------------------------------
   const togglePlay = () => {
     const p = playerRef.current;
@@ -146,23 +248,29 @@ export default function Player({ videoId }) {
     setCurrent(ratio * duration);
   };
 
-  const setVol = (e) => {
+  // Single source of truth for setting volume — used by the slider and the
+  // keyboard arrows. Unmutes when raised, and persists the choice.
+  const applyVolume = (raw) => {
     const p = playerRef.current;
     if (!p) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.touches?.[0]?.clientX ?? e.clientX) - rect.left;
-    const ratio = Math.max(0, Math.min(1, x / rect.width));
-    const v = Math.round(ratio * 100);
+    const v = clampVol(raw);
     p.setVolume(v);
     setVolume(v);
-    if (v > 0 && muted) { p.unMute(); setMuted(false); }
+    saveVol(v);
+    if (v > 0 && p.isMuted?.()) { p.unMute(); setMuted(false); saveMuted(false); }
+  };
+
+  const setVol = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.touches?.[0]?.clientX ?? e.clientX) - rect.left;
+    applyVolume((x / rect.width) * 100);
   };
 
   const toggleMute = () => {
     const p = playerRef.current;
     if (!p) return;
-    if (muted) { p.unMute(); setMuted(false); }
-    else       { p.mute();   setMuted(true);  }
+    if (p.isMuted?.()) { p.unMute(); setMuted(false); saveMuted(false); }
+    else               { p.mute();   setMuted(true);  saveMuted(true);  }
   };
 
   const toggleFs = () => {
@@ -221,7 +329,7 @@ export default function Player({ videoId }) {
       onMouseLeave={() => playing && setActive(false)}
       onTouchStart={poke}
     >
-      <div id={containerId} className="player-iframe" />
+      <div ref={hostRef} className="player-iframe" />
       <Box className={`player-overlay ${active ? 'is-active' : ''}`}>
         {/* Center play-pause overlay (visible when paused) */}
         {ready && !playing && !ended && (
@@ -255,7 +363,7 @@ export default function Player({ videoId }) {
 
         {/* Bottom control row */}
         <Box className="player-controls">
-          <Tooltip title={playing ? 'Pause' : 'Play'}>
+          <Tooltip title={`${playing ? 'Pause' : 'Play'} · space`}>
             <button className="player-btn" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
               {playing ? <Pause fontSize="small" /> : <PlayArrow fontSize="small" />}
             </button>
@@ -276,7 +384,7 @@ export default function Player({ videoId }) {
             <div className="player-scrub-knob" style={{ left: `${pct}%` }} />
           </div>
 
-          <Tooltip title={muted ? 'Unmute' : 'Mute'}>
+          <Tooltip title={`${muted ? 'Unmute' : 'Mute'} · m`}>
             <button className="player-btn" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
               {muted || volume === 0 ? <VolumeOff fontSize="small" /> : <VolumeUp fontSize="small" />}
             </button>
@@ -312,7 +420,7 @@ export default function Player({ videoId }) {
               <OpenInNew fontSize="small" />
             </a>
           </Tooltip>
-          <Tooltip title={isFs ? 'Exit fullscreen' : 'Fullscreen'}>
+          <Tooltip title={`${isFs ? 'Exit fullscreen' : 'Fullscreen'} · f`}>
             <button className="player-btn" onClick={toggleFs} aria-label={isFs ? 'Exit fullscreen' : 'Fullscreen'} data-active={isFs}>
               {isFs ? <FullscreenExit fontSize="small" /> : <Fullscreen fontSize="small" />}
             </button>

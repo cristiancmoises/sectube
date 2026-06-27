@@ -51,6 +51,41 @@ export function ErrorPanel({ error, onRetry }) {
   );
 }
 
+/**
+ * Footer shown under an infinite-scroll grid: a spinner while the next page
+ * loads, a one-time error with retry, or an end-of-feed marker.
+ */
+export function FeedStatus({ loading, error, exhausted, count, onRetry }) {
+  if (error) {
+    return (
+      <Stack direction="row" justifyContent="center" sx={{ mt: 3 }}>
+        <Button variant="outlined" color="inherit" onClick={onRetry}
+          sx={{ borderColor: '#ff4081', color: '#ff4081' }}>
+          Failed to load more — retry
+        </Button>
+      </Stack>
+    );
+  }
+  if (loading) {
+    return (
+      <Stack direction="row" gap={1.5} alignItems="center" justifyContent="center" sx={{ py: 4 }}>
+        <span className="spinner" aria-hidden="true" />
+        <Typography sx={{ color: 'var(--c-text-dim)', fontFamily: 'var(--mono)', fontSize: 12 }}>
+          loading…
+        </Typography>
+      </Stack>
+    );
+  }
+  if (exhausted && count > 0) {
+    return (
+      <Typography align="center" sx={{ color: 'var(--c-text-faint)', fontFamily: 'var(--mono)', fontSize: 11, py: 4 }}>
+        — END · {count} videos —
+      </Typography>
+    );
+  }
+  return null;
+}
+
 export function EmptyState({ message = 'No videos found.' }) {
   return (
     <Box sx={{ py: 6, textAlign: 'center' }}>

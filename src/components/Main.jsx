@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Stack, Typography } from '@mui/material';
 import Category from './Category.jsx';
 import Videos from './Videos.jsx';
-import { Loader, ErrorPanel } from './Loader.jsx';
-import { useFetch } from '../hooks/useFetch.js';
-import { buildSearchUrl, DEFAULT_CATEGORY, getStoredRegion } from '../services/region.js';
-import { queryFor } from '../constants/index.jsx';
+import InfiniteSentinel from './InfiniteSentinel.jsx';
+import { Loader, ErrorPanel, FeedStatus } from './Loader.jsx';
+import { usePagedVideos } from '../hooks/usePagedVideos.js';
+import { DEFAULT_CATEGORY, getStoredRegion } from '../services/region.js';
+import { buildFeedUrl } from '../constants/index.jsx';
 
 export default function Main() {
   const [selectedCategory, setSelectedCategory] = useState(DEFAULT_CATEGORY);
@@ -18,11 +19,15 @@ export default function Main() {
     return () => window.removeEventListener('sectube:region-change', handler);
   }, []);
 
-  // Recompute URL whenever category OR region changes. The region read is
-  // implicit (buildSearchUrl reads from storage); we include `region` in the
-  // dep key so React re-renders and useFetch re-fires.
-  const url = buildSearchUrl(queryFor(selectedCategory)) + `&_r=${region}`;
-  const { data, error, loading, refetch } = useFetch(url);
+  // buildFeedUrl reads the region from storage; `region` in the deps makes the
+  // URL recompute (and the pager reset) whenever the picker changes it.
+  const baseUrl = useMemo(
+    () => buildFeedUrl(selectedCategory, region),
+    [selectedCategory, region]
+  );
+
+  const { items, loading, error, exhausted, loadMore } = usePagedVideos(baseUrl);
+  const initialLoading = loading && items.length === 0;
 
   return (
     <>
@@ -46,9 +51,21 @@ export default function Main() {
           </span>
         </Stack>
 
-        {loading && <Loader count={12} />}
-        {error && <ErrorPanel error={error} onRetry={refetch} />}
-        {!loading && !error && <Videos videos={data?.items || []} />}
+        {initialLoading && <Loader count={12} />}
+        {error && items.length === 0 && <ErrorPanel error={error} onRetry={loadMore} />}
+        {!initialLoading && (!error || items.length > 0) && (
+          <>
+            <Videos videos={items} />
+            <FeedStatus
+              loading={loading}
+              error={error}
+              exhausted={exhausted}
+              count={items.length}
+              onRetry={loadMore}
+            />
+            <InfiniteSentinel onLoadMore={loadMore} disabled={loading || exhausted || Boolean(error)} />
+          </>
+        )}
       </Box>
     </>
   );

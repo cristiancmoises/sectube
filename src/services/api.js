@@ -103,5 +103,30 @@ export async function fetchApi(path, opts = {}) {
   }
 }
 
+const VIDEO_ID_RE = /^[\w-]{11}$/;
+
+/**
+ * Batch-fetch contentDetails + statistics for video ids.
+ * The search endpoint only returns `snippet` (no duration, no view count), so
+ * cards look bare. videos.list fills that in for a flat 1 quota unit per 50 ids
+ * — a tiny cost next to search's 100. Returns a map of { videoId -> videoItem }.
+ *
+ * @param {string[]} ids
+ * @param {{ signal?: AbortSignal }} [opts]
+ */
+export async function fetchVideoMeta(ids, opts = {}) {
+  const clean = [...new Set((ids || []).filter((x) => VIDEO_ID_RE.test(x)))];
+  const out = {};
+  for (let i = 0; i < clean.length; i += 50) {
+    const chunk = clean.slice(i, i + 50);
+    const data = await fetchApi(
+      `videos?part=contentDetails,statistics&id=${chunk.join(',')}&maxResults=50`,
+      { signal: opts.signal }
+    );
+    for (const v of data?.items || []) out[v.id] = v;
+  }
+  return out;
+}
+
 // Back-compat shim.
 export const ApiService = { fetching: (url) => fetchApi(url) };

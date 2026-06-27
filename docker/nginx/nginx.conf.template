@@ -1,5 +1,9 @@
 # nginx.conf.template — rendered via sed at container boot.
-# Env vars: ${GOOGLE_API_KEY} ${GOOGLE_API_HOST} ${SERVER_PORT} ${NGINX_RESOLVERS}
+# Env vars substituted here: ${GOOGLE_API_HOST} ${SERVER_PORT} ${NGINX_RESOLVERS}
+#
+# NOTE: the API key(s) are NO LONGER substituted into this file. They are read
+# from the environment directly by the Lua rotator (docker/nginx/lua/rotator.lua)
+# so secrets never touch the rendered config on disk. See nginx.sectube.conf.
 
 # Per-IP rate limit on /api/* — quota protection + cheap DDoS resistance.
 limit_req_zone $binary_remote_addr zone=api_zone:10m rate=10r/s;
@@ -20,12 +24,8 @@ server {
     index index.html;
 
     # ---- Security headers --------------------------------------------------
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "DENY" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
-    # CSP: allow self + YouTube IFrame API script + YouTube embed origins.
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://yt3.ggpht.com https://yt3.googleusercontent.com; font-src 'self' data:; media-src 'self' blob:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none';" always;
+    # Re-included in any location with its own add_header (see the snippet).
+    include /etc/nginx/security-headers.conf;
 
     # ---- Compression -------------------------------------------------------
     gzip on;
@@ -40,37 +40,38 @@ server {
 
     client_max_body_size 128k;
 
-    # ---- /api/*  ->  https://${GOOGLE_API_HOST}/youtube/v3/*  --------------
-    # Regex location captures path. We inject `key=…` as a query parameter
-    # via `args` because Google's API authenticates via query string, not
-    # a header.
+    # ---- /api/*  ->  rotator (Lua) -> https://${GOOGLE_API_HOST}/youtube/v3/*
+    # The Lua handler picks a healthy key, makes an internal subrequest to
+    # /__yt/<path> (below), retries on quota/rate/bad-key by rotating keys, and
+    # serves a short-TTL shared cache for identical requests.
     location ~ ^/api/(?<proxy_path>.*)$ {
         limit_req zone=api_zone burst=20 nodelay;
+        default_type application/json;
+        content_by_lua_block {
+            require("rotator").handle()
+        }
+    }
 
-        # $upstream_host as variable forces runtime DNS resolution.
+    # ---- Internal upstream: the real call to Google. ----------------------
+    # `internal` => unreachable from the network; only ngx.location.capture()
+    # from the rotator can hit it. The rotator appends key=… to $args.
+    location ~ ^/__yt/(?<yt_path>.*)$ {
+        internal;
+
+        # $upstream_host as a variable forces runtime DNS resolution.
         set $upstream_host "${GOOGLE_API_HOST}";
+        proxy_pass https://$upstream_host/youtube/v3/$yt_path$is_args$args;
 
-        # Append `key=…` to the upstream args. If the request already has
-        # query params we use `&` separator, otherwise `?`. Nginx exposes
-        # this via $is_args.
-        set $upstream_args "${args}";
-        if ($is_args = "") {
-            set $upstream_args "key=${GOOGLE_API_KEY}";
-        }
-        if ($is_args = "?") {
-            set $upstream_args "${args}&key=${GOOGLE_API_KEY}";
-        }
-        proxy_pass https://$upstream_host/youtube/v3/$proxy_path?$upstream_args;
         proxy_ssl_server_name on;
         proxy_ssl_name $upstream_host;
         proxy_ssl_verify on;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 
-        # Minimal headers. Google doesn't require auth headers — the key is
-        # in the URL. We strip the browser-side stuff for safety.
+        # Minimal headers. Google authenticates via the key in the URL.
         proxy_set_header Host $upstream_host;
         proxy_set_header Accept "application/json";
-        proxy_set_header User-Agent "sectube/3.0";
+        proxy_set_header Accept-Encoding "";
+        proxy_set_header User-Agent "sectube/4.0";
         proxy_set_header Cookie "";
         proxy_set_header Authorization "";
 
@@ -80,7 +81,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Connection "";
 
-        # Don't pass Set-Cookie back to the browser.
+        # Don't pass Set-Cookie back through the rotator.
         proxy_hide_header Set-Cookie;
     }
 
@@ -95,6 +96,7 @@ server {
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable" always;
+        include /etc/nginx/security-headers.conf;  # re-emit; add_header above reset inheritance
         access_log off;
         try_files $uri =404;
     }
@@ -102,6 +104,7 @@ server {
     # ---- SPA fallback ------------------------------------------------------
     location / {
         add_header Cache-Control "no-cache" always;
+        include /etc/nginx/security-headers.conf;  # re-emit; add_header above reset inheritance
         try_files $uri $uri/ /index.html;
     }
 

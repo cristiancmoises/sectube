@@ -1,54 +1,49 @@
 # syntax=docker/dockerfile:1.7
 # =========================================================================
-# Lean image: just nginx + the prebuilt dist/ directory.
+# Lean image: OpenResty + the prebuilt dist/ directory.
+#
+# OpenResty (nginx + LuaJIT) powers the API-key rotator + response cache
+# (docker/nginx/lua/rotator.lua). Plain nginx can't rotate keys or retry on a
+# 403 quotaExceeded body; LuaJIT can, with zero third-party Lua modules.
 #
 # This file INTENTIONALLY does not run npm. Building React inside Docker
-# hammered memory/CPU-constrained hosts and was failing with npm's
-# "Exit handler never called!" OOM-adjacent error.
-#
-# The build now happens outside Docker:
+# hammered memory/CPU-constrained hosts. Build the bundle outside Docker first:
 #   - If you have Node on the host:      npm ci && npm run build
-#   - If you don't:                      ./scripts/build.sh  (runs a one-off
-#                                        node:22-slim container to build,
-#                                        outputs to ./dist on your host)
-#
+#   - If you don't:                      ./scripts/build.sh
 # Either way, `dist/` must exist before `docker compose build`.
-# If you WANT the full in-image build, use Dockerfile.full-build instead.
+# For the full in-image build, use Dockerfile.full-build instead.
 # =========================================================================
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM openresty/openresty:1.27.1.2-alpine
 
-USER root
+# ca-certificates: required so the rotator can verify Google's TLS cert
+# (proxy_ssl_verify on). This is the only build-time network dependency.
+RUN apk add --no-cache ca-certificates tzdata && update-ca-certificates
 
-# Remove the default conf.d entry — we drive nginx via our own main config.
-RUN rm -f /etc/nginx/conf.d/default.conf
-
-# Ship our custom files under /etc/nginx. The rendered server-block fragment
-# lives in /tmp at runtime (see entrypoint.sh), so /etc/nginx itself can stay
-# read-only without problems.
-COPY docker/nginx/nginx.sectube.conf /etc/nginx/nginx.sectube.conf
-COPY docker/nginx/nginx.conf.template /etc/nginx/templates/default.conf.template
-COPY docker/entrypoint.sh /docker-entrypoint-sectube.sh
-# chmod is belt; we invoke via `/bin/sh` below (suspenders) so even if the
-# +x bit is stripped by some filesystem along the way, the script still runs.
+# Ship our custom files. The rendered server-block fragment lives in /tmp at
+# runtime (see entrypoint.sh), so /etc/nginx itself can stay read-only.
+COPY docker/nginx/nginx.sectube.conf       /etc/nginx/nginx.sectube.conf
+COPY docker/nginx/nginx.conf.template      /etc/nginx/templates/default.conf.template
+COPY docker/nginx/security-headers.conf    /etc/nginx/security-headers.conf
+COPY docker/nginx/lua/                      /etc/nginx/lua/
+COPY docker/entrypoint.sh                   /docker-entrypoint-sectube.sh
 RUN chmod 0755 /docker-entrypoint-sectube.sh
 
 # The prebuilt React bundle.
 COPY dist/ /usr/share/nginx/html/
 
-# nginx user only needs to READ the html + /etc/nginx files. It writes only
-# to /tmp (rendered config, pid, temp paths), which is tmpfs at runtime.
-RUN chown -R nginx:nginx /usr/share/nginx/html
+# Run unprivileged. Create a dedicated user; it only needs READ on the html +
+# /etc/nginx files and WRITE to /tmp (rendered config, pid, temp paths — tmpfs
+# at runtime).
+RUN addgroup -S sectube 2>/dev/null || true; \
+    adduser -S -G sectube -u 1001 sectube 2>/dev/null || true; \
+    chown -R sectube:sectube /usr/share/nginx/html
 
-USER nginx
+USER sectube
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -q --spider http://127.0.0.1:8080/healthz || exit 1
 
-# Invoke via `/bin/sh script` instead of `./script`. This sidesteps any
-# combination of +x weirdness, shebang interpretation, and the
-# `no-new-privileges: true` security_opt that can refuse to exec a script
-# directly under nginx-unprivileged. `sh` reads the file as input — no
-# privilege transition involved, no exec-of-script semantics, always works.
+# Invoke via `/bin/sh script` to sidestep any +x / shebang weirdness.
 ENTRYPOINT ["/bin/sh", "/docker-entrypoint-sectube.sh"]

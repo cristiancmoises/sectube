@@ -25,6 +25,7 @@ export default [
         setInterval: 'readonly',
         clearInterval: 'readonly',
         CustomEvent: 'readonly',
+        IntersectionObserver: 'readonly',
       },
       parserOptions: {
         ecmaFeatures: { jsx: true },

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Avatar, Box, Chip, IconButton, Snackbar, Stack, Tooltip, Typography } from '@mui/material';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -8,7 +8,9 @@ import {
 import Player from './Player.jsx';
 import { Loader, ErrorPanel } from './Loader.jsx';
 import { useFetch } from '../hooks/useFetch.js';
-import { compactCount, sanitizeDescription } from '../utils/format.js';
+import { buildSearchUrl } from '../services/region.js';
+import { compactCount } from '../utils/format.js';
+import { sanitizeDescription } from '../utils/sanitize.js';
 
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 
@@ -21,9 +23,18 @@ export default function VideoDetail() {
     data: videoData, error: videoErr, loading: videoLoading, refetch,
   } = useFetch(safeId ? `videos?part=snippet,statistics&id=${safeId}` : null);
 
-  const { data: relatedData } = useFetch(
-    safeId ? `search?part=snippet&relatedToVideoId=${safeId}&type=video` : null
-  );
+  // "Related" via title keywords. YouTube removed the `relatedToVideoId` search
+  // parameter in 2023 (it now 400s), so we approximate relatedness with a search
+  // on the video's title once it has loaded.
+  const firstItem = videoData?.items?.[0];
+  const relatedUrl = useMemo(() => {
+    const title = firstItem?.snippet?.title;
+    if (!title) return null;
+    const q = title.replace(/[|#].*/g, '').split(/\s+/).filter(Boolean).slice(0, 8).join(' ');
+    if (!q) return null;
+    return buildSearchUrl(q, { maxResults: '24', type: 'video', videoEmbeddable: 'true' }, { regional: false });
+  }, [firstItem]);
+  const { data: relatedData } = useFetch(relatedUrl);
 
   const [descExpanded, setDescExpanded] = useState(false);
   const [snack, setSnack] = useState({ open: false, msg: '' });
@@ -36,7 +47,7 @@ export default function VideoDetail() {
   if (!videoDetail?.snippet) return <ErrorPanel error={{ message: 'Video not found.' }} />;
 
   const { snippet, statistics } = videoDetail;
-  const tags = Array.isArray(snippet.tags) ? snippet.tags.slice(0, 10) : [];
+  const tags = Array.isArray(snippet.tags) ? snippet.tags.slice(0, 6) : [];
   const ytUrl = `https://www.youtube.com/watch?v=${safeId}`;
 
   async function copyLink() {
@@ -134,7 +145,19 @@ export default function VideoDetail() {
           {tags.length > 0 && (
             <Stack direction="row" gap={0.75} sx={{ mt: 2, flexWrap: 'wrap' }}>
               {tags.map((tag, idx) => (
-                <Chip key={`${tag}-${idx}`} label={tag} size="small" variant="outlined" />
+                <Chip
+                  key={`${tag}-${idx}`}
+                  label={`#${tag}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    height: 22,
+                    fontSize: 11,
+                    color: 'var(--c-text-faint)',
+                    borderColor: 'var(--c-border)',
+                    '& .MuiChip-label': { px: 1 },
+                  }}
+                />
               ))}
             </Stack>
           )}
@@ -175,7 +198,7 @@ export default function VideoDetail() {
           }}>
             {(relatedData?.items || []).map((it, i) => {
               const vid = it?.id?.videoId;
-              if (!vid || !it?.snippet) return null;
+              if (!vid || vid === safeId || !it?.snippet) return null;
               const thumb = it.snippet.thumbnails?.medium?.url || it.snippet.thumbnails?.default?.url || '';
               return (
                 <Link key={vid || i} to={`/video/${vid}`} className="card-link">
@@ -186,7 +209,7 @@ export default function VideoDetail() {
                       flex: { lg: '0 0 140px' },
                       bgcolor: '#111',
                     }}>
-                      <Box component="img" src={thumb} alt="" loading="lazy"
+                      <Box component="img" src={thumb} alt="" loading="lazy" decoding="async"
                         sx={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }} />
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0, p: { xs: 1, lg: 0 } }}>
