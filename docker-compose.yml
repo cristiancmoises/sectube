@@ -10,10 +10,19 @@ services:
       - "${HOST_PORT:-8080}:8080"
     environment:
       SERVER_PORT: "8080"
-      # Injected into the rendered nginx config at boot. Never baked into the image.
+      # Read by the Lua rotator via the environment — never baked into the image
+      # and never written into the rendered config on disk.
+      # GOOGLE_API_KEYS: many keys, comma-separated, rotated to dodge quota.
+      GOOGLE_API_KEYS: "${GOOGLE_API_KEYS:-}"
+      # GOOGLE_API_KEY: single-key back-compat; merged in with GOOGLE_API_KEYS.
       GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
       GOOGLE_API_HOST: "${GOOGLE_API_HOST:-youtube.googleapis.com}"
       NGINX_RESOLVERS: "${NGINX_RESOLVERS:-1.1.1.1 8.8.8.8 9.9.9.9}"
+      # Rotation + cache tuning (all optional; sane defaults in rotator.lua).
+      GOOGLE_KEY_QUOTA_COOLDOWN: "${GOOGLE_KEY_QUOTA_COOLDOWN:-}"
+      GOOGLE_KEY_RATE_COOLDOWN: "${GOOGLE_KEY_RATE_COOLDOWN:-}"
+      GOOGLE_KEY_BAD_COOLDOWN: "${GOOGLE_KEY_BAD_COOLDOWN:-}"
+      GOOGLE_API_CACHE_TTL: "${GOOGLE_API_CACHE_TTL:-}"
     env_file:
       - path: .env
         required: false
@@ -29,7 +38,11 @@ services:
       - /var/run
     cap_drop:
       - ALL
-    # security_opt: no-new-privileges removed — see AUDIT.md.
+    security_opt:
+      # Re-enabled on the OpenResty base (the old removal was a workaround for the
+      # nginx-unprivileged image; verified working here). Blocks setuid privilege
+      # escalation inside the container.
+      - "no-new-privileges:true"
     deploy:
       resources:
         limits:

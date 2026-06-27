@@ -22,6 +22,12 @@ export const DEFAULT_REGION = 'JP';
 export const DEFAULT_CATEGORY = 'New';
 export const REGION_KEY = 'sectube.region';
 
+// Items requested per page. search/* costs a flat 100 quota units regardless of
+// maxResults, so a large page is strictly more quota-efficient than a small one.
+// 24 keeps the first paint snappy while still filling the grid; infinite scroll
+// pulls the rest. (YouTube caps maxResults at 50.)
+export const PAGE_SIZE = 24;
+
 /** Read stored region code; fall back to DEFAULT_REGION. */
 export function getStoredRegion() {
   try {
@@ -46,7 +52,12 @@ export function languageFor(code) {
  * Region is read live from storage so any change propagates without a reload.
  */
 export function buildSearchUrl(query, extra = {}, { regional = true } = {}) {
-  const params = new URLSearchParams({ part: 'snippet', q: query, ...extra });
+  const params = new URLSearchParams({
+    part: 'snippet',
+    q: query,
+    maxResults: String(PAGE_SIZE),
+    ...extra,
+  });
   if (regional) {
     const region = getStoredRegion();
     const lang = languageFor(region);

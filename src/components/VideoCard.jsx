@@ -30,6 +30,7 @@ export default function VideoCard({ video }) {
             src={thumb}
             alt=""
             loading="lazy"
+            decoding="async"
             sx={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }}
           />
           {duration && <span className="duration-badge">{duration}</span>}

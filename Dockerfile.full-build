@@ -35,37 +35,33 @@ ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 # =========================================================================
-# Stage 2: serve static files via nginx (unprivileged image, rootless).
+# Stage 2: serve via OpenResty (nginx + LuaJIT) for the key rotator.
 # =========================================================================
-# nginxinc/nginx-unprivileged runs as UID 101 by default and listens on a
-# non-privileged port out of the box. No USER root anywhere.
-#
-# We deliberately do NOT `apk add` anything — the base image already has
-# everything we need (nginx, ca-certificates, BusyBox's sed/wget), so the
-# image build has zero network dependencies beyond the base pull itself.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runner
+FROM openresty/openresty:1.27.1.2-alpine AS runner
 
-USER root
+# ca-certificates: required for the rotator's upstream TLS verification.
+RUN apk add --no-cache ca-certificates tzdata && update-ca-certificates
 
-# Remove the default config so our template-rendered one is authoritative.
-RUN rm -f /etc/nginx/conf.d/default.conf
-
-# Copy template + entrypoint.
-COPY docker/nginx/nginx.conf.template /etc/nginx/templates/default.conf.template
-COPY docker/entrypoint.sh /docker-entrypoint-sectube.sh
-RUN chmod +x /docker-entrypoint-sectube.sh
+# Copy our config, Lua rotator + entrypoint.
+COPY docker/nginx/nginx.sectube.conf       /etc/nginx/nginx.sectube.conf
+COPY docker/nginx/nginx.conf.template      /etc/nginx/templates/default.conf.template
+COPY docker/nginx/security-headers.conf    /etc/nginx/security-headers.conf
+COPY docker/nginx/lua/                      /etc/nginx/lua/
+COPY docker/entrypoint.sh                   /docker-entrypoint-sectube.sh
+RUN chmod 0755 /docker-entrypoint-sectube.sh
 
 # Copy the built site.
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Permissions: nginx user must be able to read html AND write conf.d at boot.
-RUN chown -R nginx:nginx /usr/share/nginx/html /etc/nginx/conf.d /etc/nginx/templates
+# Run unprivileged.
+RUN addgroup -S sectube 2>/dev/null || true; \
+    adduser -S -G sectube -u 1001 sectube 2>/dev/null || true; \
+    chown -R sectube:sectube /usr/share/nginx/html
 
-USER nginx
+USER sectube
 
 EXPOSE 8080
 
-# Healthcheck — wget is in BusyBox, always present. No curl needed.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -q --spider http://127.0.0.1:8080/healthz || exit 1
 

@@ -22,6 +22,7 @@ import {
   TheaterComedy,
   TravelExplore,
 } from '@mui/icons-material';
+import { buildSearchUrl, getStoredRegion, languageFor, PAGE_SIZE } from '../services/region.js';
 
 export const logo = '/sec-logo.svg';
 
@@ -60,4 +61,39 @@ export const category = [
 export function queryFor(name) {
   const c = category.find((x) => x.name === name);
   return (c && c.query) || name;
+}
+
+/**
+ * First-page URL for a category feed.
+ *
+ * "New" (the home tab) maps to videos.list?chart=mostPopular — real regional
+ * trending, full snippet+contentDetails+statistics in one shot, and only 1
+ * quota unit (vs 100 for a search). Every other category is a regional search.
+ *
+ * `region` is passed explicitly (rather than read from storage inside) so it's a
+ * real input the caller can memoize on.
+ */
+export function buildFeedUrl(name, region = getStoredRegion()) {
+  if (name === 'New') {
+    const params = new URLSearchParams({
+      // `status` carries `embeddable` so we can drop videos that won't play in
+      // the embed (trending is heavy on embed-blocked music videos).
+      part: 'snippet,contentDetails,statistics,status',
+      chart: 'mostPopular',
+      maxResults: String(PAGE_SIZE),
+      regionCode: region,
+    });
+    return `videos?${params.toString()}`;
+  }
+  return buildSearchUrl(
+    queryFor(name),
+    {
+      maxResults: String(PAGE_SIZE),
+      type: 'video',
+      videoEmbeddable: 'true', // only surface videos that actually play in-app
+      regionCode: region,
+      relevanceLanguage: languageFor(region),
+    },
+    { regional: false }
+  );
 }

@@ -1,14 +1,17 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Box, Button, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { useState } from 'react';
+import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import VideoCard from './VideoCard.jsx';
 import ChannelCard from './ChannelCard.jsx';
-import { Loader, ErrorPanel, EmptyState } from './Loader.jsx';
+import InfiniteSentinel from './InfiniteSentinel.jsx';
+import { Loader, ErrorPanel, EmptyState, FeedStatus } from './Loader.jsx';
 import { useFetch } from '../hooks/useFetch.js';
-import { fetchApi } from '../services/api.js';
+import { usePagedVideos } from '../hooks/usePagedVideos.js';
+import { durationSeconds } from '../utils/format.js';
 
 const CHANNEL_ID_RE = /^[\w-]{6,64}$/;
+const SHORT_MAX_SECONDS = 60;
 
 const TABS = [
   { id: 'videos',    label: 'Videos' },
@@ -18,63 +21,14 @@ const TABS = [
 ];
 
 /**
- * Heuristic: a Shorts video has a portrait thumbnail aspect.
- * The API doesn't expose a Shorts flag; we approximate by thumbnail shape.
+ * Heuristic: the Data API exposes no Shorts flag, and thumbnails are always
+ * reported landscape even for Shorts — so we approximate by duration once the
+ * item is hydrated (≤60s = Short). Unhydrated items (no contentDetails yet)
+ * return 0 and are treated as regular videos until hydration fills them in.
  */
-function isShortByThumb(item) {
-  const t = item?.snippet?.thumbnails?.high || item?.snippet?.thumbnails?.medium;
-  if (!t?.width || !t?.height) return false;
-  return t.height > t.width;
-}
-
-/**
- * Generic paged fetcher built on the search endpoint.
- * Stops when the API stops returning a nextPageToken (API caps ~500 items).
- */
-function usePagedSearch(baseUrl) {
-  const [items, setItems] = useState([]);
-  const [token, setToken] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [exhausted, setExhausted] = useState(false);
-
-  const reset = useCallback(() => {
-    setItems([]); setToken(null); setError(null); setExhausted(false);
-  }, []);
-
-  const loadMore = useCallback(async () => {
-    if (loading || exhausted || !baseUrl) return;
-    setLoading(true); setError(null);
-    try {
-      const url = token ? `${baseUrl}&pageToken=${encodeURIComponent(token)}` : baseUrl;
-      const data = await fetchApi(url);
-      const newItems = Array.isArray(data?.items) ? data.items : [];
-      setItems((prev) => prev.concat(newItems));
-      const next = data?.nextPageToken;
-      setToken(next || null);
-      if (!next) setExhausted(true);
-    } catch (e) {
-      if (e.name !== 'CanceledError') setError(e);
-    } finally {
-      setLoading(false);
-    }
-  }, [baseUrl, token, loading, exhausted]);
-
-  // Auto-load on first mount / url change.
-  useEffect(() => {
-    reset();
-  }, [baseUrl, reset]);
-
-  useEffect(() => {
-    // Fire initial load after reset cleared state.
-    if (!baseUrl) return;
-    if (items.length === 0 && !exhausted && !loading) {
-      loadMore();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseUrl]);
-
-  return { items, loading, error, exhausted, loadMore };
+function isShort(item) {
+  const sec = durationSeconds(item?.contentDetails?.duration);
+  return sec > 0 && sec <= SHORT_MAX_SECONDS;
 }
 
 export default function Channel() {
@@ -88,41 +42,38 @@ export default function Channel() {
     loading: channelLoading, refetch: refetchChannel,
   } = useFetch(safeId ? `channels?part=snippet,statistics,brandingSettings&id=${safeId}` : null);
 
-  // Channel uploads (used by Videos + Shorts tabs; filtered client-side).
+  // Channel uploads (Videos + Shorts tabs share this; filtered client-side).
   const videosUrl = safeId
     ? `search?channelId=${safeId}&part=snippet,id&order=date&type=video&maxResults=50`
     : null;
-
-  // Live broadcasts.
   const liveUrl = safeId
     ? `search?channelId=${safeId}&part=snippet,id&order=date&type=video&eventType=live&maxResults=50`
     : null;
-
-  // Playlists.
   const playlistsUrl = safeId
     ? `playlists?channelId=${safeId}&part=snippet,contentDetails&maxResults=50`
     : null;
 
-  const videosPager    = usePagedSearch(tab === 'videos' || tab === 'shorts' ? videosUrl : null);
-  const livePager      = usePagedSearch(tab === 'live'     ? liveUrl     : null);
-  const playlistsPager = usePagedSearch(tab === 'playlists' ? playlistsUrl : null);
+  const videosPager    = usePagedVideos((tab === 'videos' || tab === 'shorts') ? videosUrl : null);
+  const livePager      = usePagedVideos(tab === 'live' ? liveUrl : null);
+  const playlistsPager = usePagedVideos(tab === 'playlists' ? playlistsUrl : null,
+    { hydrate: false, normalize: false });
 
   if (!safeId) return <ErrorPanel error={{ message: 'Invalid channel id.' }} />;
 
   const channelDetail = channelData?.items?.[0];
   const banner = channelDetail?.brandingSettings?.image?.bannerExternalUrl;
 
-  // Filter the videos pager differently per tab.
   const filteredVideos = tab === 'shorts'
-    ? videosPager.items.filter(isShortByThumb)
+    ? videosPager.items.filter(isShort)
     : tab === 'videos'
-      ? videosPager.items.filter((v) => !isShortByThumb(v))
+      ? videosPager.items.filter((v) => !isShort(v))
       : videosPager.items;
 
   const activePager =
     tab === 'live'      ? livePager :
     tab === 'playlists' ? playlistsPager :
                           videosPager;
+  const sentinelDisabled = activePager.loading || activePager.exhausted || Boolean(activePager.error);
 
   return (
     <Box className="page" sx={{ pt: 0, px: 0 }}>
@@ -178,8 +129,8 @@ export default function Channel() {
         <Box role="tabpanel" id={`tab-panel-${tab}`} sx={{ mt: 2 }}>
           {tab === 'playlists' ? (
             <>
-              {activePager.loading && filteredVideos.length === 0 && <Loader count={4} />}
-              {activePager.error && <ErrorPanel error={activePager.error} />}
+              {activePager.loading && playlistsPager.items.length === 0 && <Loader count={4} />}
+              {activePager.error && playlistsPager.items.length === 0 && <ErrorPanel error={activePager.error} onRetry={activePager.loadMore} />}
               {!activePager.loading && playlistsPager.items.length === 0 && <EmptyState message="No playlists." />}
               <div className="grid">
                 {playlistsPager.items.map((p) => {
@@ -195,7 +146,7 @@ export default function Channel() {
                       className="card-link"
                     >
                       <Box sx={{ position: 'relative', bgcolor: '#111' }}>
-                        <Box component="img" src={thumb} alt="" loading="lazy"
+                        <Box component="img" src={thumb} alt="" loading="lazy" decoding="async"
                           sx={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }} />
                         <span className="duration-badge">
                           {p.contentDetails?.itemCount ?? '?'} items
@@ -213,9 +164,12 @@ export default function Channel() {
             </>
           ) : (
             <>
-              {activePager.loading && filteredVideos.length === 0 && <Loader count={8} />}
-              {activePager.error && <ErrorPanel error={activePager.error} />}
-              {!activePager.loading && filteredVideos.length === 0 && (
+              {activePager.items.length === 0 && activePager.loading && <Loader count={8} />}
+              {activePager.error && activePager.items.length === 0 && <ErrorPanel error={activePager.error} onRetry={activePager.loadMore} />}
+              {/* Empty only once the pager is fully drained and this tab's filter
+                  still matched nothing — Shorts filters most uploads out, so
+                  judging emptiness mid-stream would flash a false "none". */}
+              {activePager.exhausted && filteredVideos.length === 0 && !activePager.error && (
                 <EmptyState message={
                   tab === 'live'   ? 'No live broadcasts right now.'
                 : tab === 'shorts' ? 'No Shorts found for this channel.'
@@ -232,23 +186,14 @@ export default function Channel() {
             </>
           )}
 
-          <Stack direction="row" justifyContent="center" sx={{ mt: 4 }}>
-            {!activePager.exhausted && !activePager.loading && activePager.items.length > 0 && (
-              <Button variant="outlined" onClick={activePager.loadMore}>
-                Load more
-              </Button>
-            )}
-            {activePager.loading && activePager.items.length > 0 && (
-              <Typography sx={{ color: 'var(--c-text-dim)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-                Loading…
-              </Typography>
-            )}
-            {activePager.exhausted && activePager.items.length > 0 && (
-              <Typography sx={{ color: 'var(--c-text-faint)', fontFamily: 'var(--mono)', fontSize: 11 }}>
-                — END · {activePager.items.length} items · YouTube caps search at ~500 —
-              </Typography>
-            )}
-          </Stack>
+          <FeedStatus
+            loading={activePager.loading}
+            error={activePager.items.length > 0 ? activePager.error : null}
+            exhausted={activePager.exhausted}
+            count={activePager.items.length}
+            onRetry={activePager.loadMore}
+          />
+          <InfiniteSentinel onLoadMore={activePager.loadMore} disabled={sentinelDisabled} />
         </Box>
       </Box>
     </Box>
