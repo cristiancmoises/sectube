@@ -247,6 +247,27 @@ a:focus-visible, button:focus-visible {
   border: none;
   display: block;
 }
+.yt-escape {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  color: var(--c-text);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.yt-escape:hover { border-color: var(--c-border-hi); background: rgba(0, 0, 0, 0.9); }
 .player-overlay {
   position: absolute;
   inset: 0;
