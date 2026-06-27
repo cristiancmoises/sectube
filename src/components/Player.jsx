@@ -80,7 +80,10 @@ export default function Player({ videoId }) {
         if (cancelled) return;
         p = new YT.Player(mount, {
           videoId: safeId,
-          host: 'https://www.youtube-nocookie.com',
+          // Standard host (not nocookie): the privacy host is bot-walled more
+          // aggressively. `origin` lets YouTube verify the embedding page, which
+          // also reduces spurious "confirm you're not a bot" interstitials.
+          host: 'https://www.youtube.com',
           playerVars: {
             controls: 0,        // we render our own
             modestbranding: 1,
@@ -89,6 +92,7 @@ export default function Player({ videoId }) {
             playsinline: 1,
             disablekb: 1,
             fs: 0,              // we provide fullscreen, not YT's
+            origin: typeof window !== 'undefined' ? window.location.origin : undefined,
           },
           events: {
             onReady: () => {
@@ -330,6 +334,19 @@ export default function Player({ videoId }) {
       onTouchStart={poke}
     >
       <div ref={hostRef} className="player-iframe" />
+      {/* Always-reachable escape: if the embed is bot-walled or won't start, the
+          viewer can still jump to YouTube with one tap. Hidden during playback. */}
+      {!playing && (
+        <a
+          className="yt-escape"
+          href={`https://www.youtube.com/watch?v=${safeId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Watch on YouTube"
+        >
+          <OpenInNew sx={{ fontSize: 14 }} /> YouTube
+        </a>
+      )}
       <Box className={`player-overlay ${active ? 'is-active' : ''}`}>
         {/* Center play-pause overlay (visible when paused) */}
         {ready && !playing && !ended && (
