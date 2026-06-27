@@ -8,7 +8,7 @@ import {
 import Player from './Player.jsx';
 import { Loader, ErrorPanel } from './Loader.jsx';
 import { useFetch } from '../hooks/useFetch.js';
-import { buildSearchUrl } from '../services/region.js';
+import { normalizeItem } from '../hooks/usePagedVideos.js';
 import { compactCount, timeFromNow } from '../utils/format.js';
 import { sanitizeDescription } from '../utils/sanitize.js';
 
@@ -23,16 +23,16 @@ export default function VideoDetail() {
     data: videoData, error: videoErr, loading: videoLoading, refetch,
   } = useFetch(safeId ? `videos?part=snippet,statistics&id=${safeId}` : null);
 
-  // "Related" via title keywords. YouTube removed the `relatedToVideoId` search
-  // parameter in 2023 (it now 400s), so we approximate relatedness with a search
-  // on the video's title once it has loaded.
+  // Related = "more from this channel" via the channel's uploads playlist.
+  // YouTube killed `relatedToVideoId` in 2023, and a title search costs 100
+  // quota units (and dies once the daily search quota is gone). playlistItems
+  // on the uploads playlist costs ONE unit and keeps working regardless.
+  // Uploads playlist id = channel id with the "UC" prefix swapped for "UU".
   const firstItem = videoData?.items?.[0];
   const relatedUrl = useMemo(() => {
-    const title = firstItem?.snippet?.title;
-    if (!title) return null;
-    const q = title.replace(/[|#].*/g, '').split(/\s+/).filter(Boolean).slice(0, 8).join(' ');
-    if (!q) return null;
-    return buildSearchUrl(q, { maxResults: '24', type: 'video', videoEmbeddable: 'true' }, { regional: false });
+    const ch = firstItem?.snippet?.channelId;
+    if (!ch || ch.slice(0, 2) !== 'UC' || ch.length < 4) return null;
+    return `playlistItems?part=snippet&maxResults=24&playlistId=UU${ch.slice(2)}`;
   }, [firstItem]);
   const { data: relatedData, loading: relatedLoading } = useFetch(relatedUrl);
 
@@ -48,9 +48,11 @@ export default function VideoDetail() {
 
   const { snippet, statistics } = videoDetail;
   const tags = Array.isArray(snippet.tags) ? snippet.tags.slice(0, 6) : [];
-  const relatedItems = (relatedData?.items || []).filter(
-    (it) => it?.id?.videoId && it.id.videoId !== safeId && it?.snippet
-  );
+  // playlistItems carry the video id under snippet.resourceId — normalizeItem
+  // lifts it to id.videoId so the cards render like everywhere else.
+  const relatedItems = (relatedData?.items || [])
+    .map(normalizeItem)
+    .filter((it) => it?.id?.videoId && it.id.videoId !== safeId && it?.snippet);
   const ytUrl = `https://www.youtube.com/watch?v=${safeId}`;
 
   async function copyLink() {
