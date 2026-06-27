@@ -13,10 +13,7 @@ export default function Category({ selected, onSelect }) {
             aria-pressed={active}
             onClick={() => onSelect(item.name)}
           >
-            <span style={{ display: 'inline-flex' }} aria-hidden="true">
-              {item.icon}
-            </span>
-            <span>{item.name}</span>
+            {item.name}
           </button>
         );
       })}
