@@ -9,7 +9,7 @@ import Player from './Player.jsx';
 import { Loader, ErrorPanel } from './Loader.jsx';
 import { useFetch } from '../hooks/useFetch.js';
 import { buildSearchUrl } from '../services/region.js';
-import { compactCount } from '../utils/format.js';
+import { compactCount, timeFromNow } from '../utils/format.js';
 import { sanitizeDescription } from '../utils/sanitize.js';
 
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
@@ -34,7 +34,7 @@ export default function VideoDetail() {
     if (!q) return null;
     return buildSearchUrl(q, { maxResults: '24', type: 'video', videoEmbeddable: 'true' }, { regional: false });
   }, [firstItem]);
-  const { data: relatedData } = useFetch(relatedUrl);
+  const { data: relatedData, loading: relatedLoading } = useFetch(relatedUrl);
 
   const [descExpanded, setDescExpanded] = useState(false);
   const [snack, setSnack] = useState({ open: false, msg: '' });
@@ -48,6 +48,9 @@ export default function VideoDetail() {
 
   const { snippet, statistics } = videoDetail;
   const tags = Array.isArray(snippet.tags) ? snippet.tags.slice(0, 6) : [];
+  const relatedItems = (relatedData?.items || []).filter(
+    (it) => it?.id?.videoId && it.id.videoId !== safeId && it?.snippet
+  );
   const ytUrl = `https://www.youtube.com/watch?v=${safeId}`;
 
   async function copyLink() {
@@ -187,26 +190,49 @@ export default function VideoDetail() {
           </Box>
         </Box>
 
-        <Box sx={{ flex: { lg: '0 0 30%' }, minWidth: 0 }}>
-          <Typography variant="overline" sx={{ color: 'var(--c-text-faint)', letterSpacing: '0.18em', display: 'block', mb: 1 }}>
-            {'// related'}
-          </Typography>
+        <Box sx={{ flex: { lg: '0 0 32%' }, minWidth: 0 }}>
+          <Stack direction="row" alignItems="baseline" gap={1} sx={{ mb: 1.25 }}>
+            <Typography variant="overline" sx={{ color: 'var(--c-text-faint)', letterSpacing: '0.18em' }}>
+              {'// related'}
+            </Typography>
+            {relatedItems.length > 0 && <span className="mono-chip">{relatedItems.length}</span>}
+          </Stack>
+
+          {relatedLoading && relatedItems.length === 0 && (
+            <Stack gap={1.25}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Stack key={i} direction={{ xs: 'column', lg: 'row' }} gap={1}>
+                  <div className="skeleton" style={{ flex: '0 0 150px', width: 150, aspectRatio: '16/9' }} />
+                  <Box sx={{ flex: 1 }}>
+                    <div className="skeleton" style={{ width: '90%', height: 12 }} />
+                    <div className="skeleton" style={{ width: '55%', height: 10, marginTop: 6 }} />
+                  </Box>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+
+          {!relatedLoading && relatedItems.length === 0 && (
+            <Typography sx={{ color: 'var(--c-text-dim)', fontSize: 13 }}>
+              No related videos found.
+            </Typography>
+          )}
+
           <Box sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(280px, 1fr))', lg: '1fr' },
-            gap: 2,
+            gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(260px, 1fr))', lg: '1fr' },
+            gap: 1.25,
           }}>
-            {(relatedData?.items || []).map((it, i) => {
-              const vid = it?.id?.videoId;
-              if (!vid || vid === safeId || !it?.snippet) return null;
+            {relatedItems.map((it) => {
+              const vid = it.id.videoId;
               const thumb = it.snippet.thumbnails?.medium?.url || it.snippet.thumbnails?.default?.url || '';
               return (
-                <Link key={vid || i} to={`/video/${vid}`} className="card-link">
+                <Link key={vid} to={`/video/${vid}`} className="card-link">
                   <Stack direction={{ xs: 'column', lg: 'row' }} gap={1} sx={{ p: { lg: 0.75 } }}>
                     <Box sx={{
                       position: 'relative',
-                      width: { xs: '100%', lg: 140 },
-                      flex: { lg: '0 0 140px' },
+                      width: { xs: '100%', lg: 150 },
+                      flex: { lg: '0 0 150px' },
                       bgcolor: '#111',
                     }}>
                       <Box component="img" src={thumb} alt="" loading="lazy" decoding="async"
@@ -222,6 +248,11 @@ export default function VideoDetail() {
                       <Typography sx={{ color: 'var(--c-text-dim)', fontSize: 11, mt: 0.5 }}>
                         {it.snippet.channelTitle}
                       </Typography>
+                      {it.snippet.publishedAt && (
+                        <Typography sx={{ color: 'var(--c-text-faint)', fontSize: 11, mt: 0.25, fontFamily: 'var(--mono)' }}>
+                          {timeFromNow(it.snippet.publishedAt)}
+                        </Typography>
+                      )}
                     </Box>
                   </Stack>
                 </Link>

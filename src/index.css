@@ -405,45 +405,39 @@ a:focus-visible, button:focus-visible {
 /* --- Category pill bar ---------------------------------------------------- */
 .cats {
   display: flex;
-  gap: 6px;
+  gap: 2px;
   overflow-x: auto;
-  scrollbar-width: thin;
-  padding: 8px 16px;
+  scrollbar-width: none;            /* minimal: no scrollbar chrome */
+  padding: 10px 16px;
   border-bottom: 1px solid var(--c-border);
-  /* Fade the trailing edge so the long scrolling row reads as "more →" instead
-     of a hard-cut wall of pills. */
-  -webkit-mask-image: linear-gradient(to right, #000 92%, transparent 100%);
-          mask-image: linear-gradient(to right, #000 92%, transparent 100%);
+  /* Fade the trailing edge so the long scrolling row reads as "more →" rather
+     than a hard-cut wall of labels. */
+  -webkit-mask-image: linear-gradient(to right, #000 93%, transparent 100%);
+          mask-image: linear-gradient(to right, #000 93%, transparent 100%);
 }
-.cats::-webkit-scrollbar { height: 4px; }
-/* Calmer chips: no border or glow at rest (that 24-box grid was the visual
-   noise), just a soft surface + dimmed label. Only the active chip lights up. */
+.cats::-webkit-scrollbar { display: none; }
+/* Minimal text labels — no icons, no borders, no surface at rest. Just faint
+   text that brightens on hover; only the active label gets a filled pill. */
 .cat-pill {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  padding: 5px 11px;
   font-family: var(--mono);
-  font-size: 11.5px;
-  letter-spacing: 0.03em;
+  font-size: 11px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--c-text-dim);
-  background: var(--c-bg-raised);
-  border: 1px solid transparent;
+  color: var(--c-text-faint);
+  background: transparent;
+  border: none;
   border-radius: 999px;
   cursor: pointer;
-  transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  transition: color 130ms ease, background 130ms ease;
   white-space: nowrap;
 }
-.cat-pill svg { font-size: 15px; opacity: 0.85; }
-.cat-pill:hover { color: var(--c-text); background: var(--c-bg-hover); }
+.cat-pill:hover { color: var(--c-text); }
 .cat-pill[aria-pressed="true"] {
-  background: var(--c-primary);
   color: #000;
-  box-shadow: var(--glow-soft);
+  background: var(--c-primary);
 }
-.cat-pill[aria-pressed="true"] svg { color: #000 !important; opacity: 1; }
 
 /* --- Search bar / select -------------------------------------------------- */
 .search-input {
