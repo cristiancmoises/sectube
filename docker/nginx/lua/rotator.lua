@@ -174,6 +174,12 @@ local function reason_of(body)
   local data = cjson.decode(body)
   if type(data) == "table" and type(data.error) == "table" then
     local e = data.error
+    -- A DAILY quota exhaustion is reported as RATE_LIMIT_EXCEEDED with a "per
+    -- day" message. Treat it as a quota (long cooldown) so a daily-dead key
+    -- isn't re-probed every rate_cooldown when other keys are available.
+    if type(e.message) == "string" and e.message:lower():find("per day", 1, true) then
+      return "quotaExceeded"
+    end
     -- Prefer a key/quota/rate reason from the modern ErrorInfo details, since
     -- the legacy errors[].reason for a bad key is just "badRequest".
     if type(e.details) == "table" then

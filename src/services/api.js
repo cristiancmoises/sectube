@@ -52,27 +52,38 @@ function googleReasonOf(err) {
   return null;
 }
 
+function googleMessageOf(err) {
+  try { return err?.response?.data?.error?.message || ''; } catch { return ''; }
+}
+
 /**
- * Map Google API error codes to user-friendly messages.
- * 403 quotaExceeded   → daily quota gone, resets midnight Pacific
- * 403 keyInvalid      → key missing or wrong
- * 403 keyExpired      → key disabled
- * 403 ipRefererBlocked→ API key has a restriction that blocks this origin
- * 400 badRequest      → malformed query
- * 404                 → not found
- * 5xx                 → Google's problem
+ * A *daily* quota exhaustion (vs a transient per-second/minute rate spike).
+ * Google confusingly reports the daily search-quota limit as 429
+ * RATE_LIMIT_EXCEEDED with a message like "Quota exceeded ... per day", so we
+ * sniff the message. Daily exhaustion won't recover until the midnight-Pacific
+ * reset, so we must NOT retry it and must not call it a momentary "rate limit".
  */
-function friendlyMessageFor(status, reason) {
+function isDailyQuota(reason, message) {
+  if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') return true;
+  const m = (message || '').toLowerCase();
+  return m.includes('per day') || (m.includes('quota') && m.includes('exceeded'));
+}
+
+/**
+ * Map Google API errors to user-friendly messages.
+ */
+function friendlyMessageFor(status, reason, message) {
+  if (isDailyQuota(reason, message)) {
+    return 'Daily search quota for this API key is used up. It resets at midnight Pacific — add more keys to GOOGLE_API_KEYS to raise the ceiling.';
+  }
   if (status === 403) {
-    if (reason === 'quotaExceeded' || reason === 'rateLimitExceeded')
-      return 'Daily API quota reached. Resets at midnight Pacific time.';
     if (reason === 'keyInvalid' || reason === 'keyExpired')
       return 'API access denied. The server admin needs to check the API key.';
     if (reason === 'ipRefererBlocked')
       return 'API key has a referrer/IP restriction that blocks this server.';
     return 'API access denied. The server admin needs to check the API key.';
   }
-  if (status === 429) return 'Rate limit reached. Try again in a moment.';
+  if (status === 429) return 'Too many requests for a moment. Try again shortly.';
   if (status === 400) return 'Invalid request.';
   if (status === 404) return 'Not found.';
   if (status >= 500)  return 'The upstream service is unavailable right now.';
@@ -124,13 +135,15 @@ export async function fetchApi(path, opts = {}) {
         if (axios.isCancel(err) || err.name === 'CanceledError') throw err;
         const status = err?.response?.status;
         const reason = googleReasonOf(err);
+        const message = googleMessageOf(err);
         // Transient rate limit → brief backoff + retry (the per-window limit
-        // clears in a moment). Never retry quota/auth/4xx — they won't recover.
-        if (isRateLimited(status, reason) && attempt < 3) {
+        // clears in a moment). But a DAILY quota exhaustion is also 429 — never
+        // retry that (it won't recover today), nor quota/auth/other 4xx.
+        if (isRateLimited(status, reason) && !isDailyQuota(reason, message) && attempt < 3) {
           await sleep(700 * attempt + Math.floor(Math.random() * 400));
           continue;
         }
-        throw new ApiError(friendlyMessageFor(status, reason), { status, cause: err, googleReason: reason });
+        throw new ApiError(friendlyMessageFor(status, reason, message), { status, cause: err, googleReason: reason });
       }
     }
   })();
