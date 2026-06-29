@@ -1,31 +1,24 @@
-# We do NOT build inside Docker anymore, so:
-#  - node_modules is not needed (and must not ship: huge + host-specific)
-#  - dist/ IS needed — that's the whole runtime payload
+# Build context for BOTH images:
+#   - Dockerfile.full-build (default) compiles React inside Docker → needs the
+#     SOURCE (package.json, src/, public/, index.html, vite.config.js, docker/).
+#   - Dockerfile (lean) → needs the prebuilt dist/.
+# So we exclude only what must NEVER be in a build context: secrets, the giant
+# host-specific node_modules, and VCS/editor junk.
 node_modules
-.vite
 .git
-.github
 .gitignore
 .dockerignore
-Dockerfile
-Dockerfile.full-build
-docker-compose.yml
+
+# Secrets — never ship keys into an image. Keep the example.
 .env
 .env.*
 !.env.example
-README.md
-*.md
+
+# Heavy / irrelevant
+.vite
 coverage
 .vscode
 .idea
 .DS_Store
 npm-debug.log*
 *.log
-src
-public
-index.html
-vite.config.js
-eslint.config.js
-package.json
-package-lock.json
-scripts

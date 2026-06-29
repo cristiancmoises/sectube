@@ -1,9 +1,14 @@
 services:
   sectube:
     build:
+      # Self-contained build: compiles the React bundle INSIDE Docker, so a
+      # fresh clone deploys with a single `docker compose up -d --build` — no
+      # separate `dist/` build step. (Low-RAM host? Switch this to `Dockerfile`
+      # and run `./scripts/build.sh` first; see README "Low-memory hosts".)
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.full-build
     image: sectube:latest
+    pull_policy: build
     container_name: sectube
     restart: unless-stopped
     ports:
