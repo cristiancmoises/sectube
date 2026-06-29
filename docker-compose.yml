@@ -17,6 +17,9 @@ services:
       # GOOGLE_API_KEY: single-key back-compat; merged in with GOOGLE_API_KEYS.
       GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
       GOOGLE_API_HOST: "${GOOGLE_API_HOST:-youtube.googleapis.com}"
+      # Set to the key's allowed HTTP referrer if your key is referrer-restricted
+      # (e.g. http://localhost:8090). Leave empty for unrestricted/IP-restricted keys.
+      GOOGLE_API_REFERER: "${GOOGLE_API_REFERER:-}"
       NGINX_RESOLVERS: "${NGINX_RESOLVERS:-1.1.1.1 8.8.8.8 9.9.9.9}"
       # Rotation + cache tuning (all optional; sane defaults in rotator.lua).
       GOOGLE_KEY_QUOTA_COOLDOWN: "${GOOGLE_KEY_QUOTA_COOLDOWN:-}"

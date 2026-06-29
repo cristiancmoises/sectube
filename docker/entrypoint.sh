@@ -12,6 +12,7 @@ set -eu
 : "${GOOGLE_API_HOST:=youtube.googleapis.com}"
 : "${GOOGLE_API_KEY:=}"
 : "${GOOGLE_API_KEYS:=}"
+: "${GOOGLE_API_REFERER:=}"
 : "${SERVER_PORT:=8080}"
 : "${NGINX_RESOLVERS:=1.1.1.1 8.8.8.8 9.9.9.9}"
 
@@ -48,11 +49,13 @@ escape() {
 HOST_ESC=$(escape "$GOOGLE_API_HOST")
 PORT_ESC=$(escape "$SERVER_PORT")
 RES_ESC=$(escape "$NGINX_RESOLVERS")
+REFERER_ESC=$(escape "$GOOGLE_API_REFERER")
 
 sed \
   -e "s|\${GOOGLE_API_HOST}|${HOST_ESC}|g" \
   -e "s|\${SERVER_PORT}|${PORT_ESC}|g" \
   -e "s|\${NGINX_RESOLVERS}|${RES_ESC}|g" \
+  -e "s|\${GOOGLE_API_REFERER}|${REFERER_ESC}|g" \
   "$TEMPLATE" > "$OUT"
 
 openresty -t -c /etc/nginx/nginx.sectube.conf
