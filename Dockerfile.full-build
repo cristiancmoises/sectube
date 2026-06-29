@@ -18,11 +18,13 @@ ENV NPM_CONFIG_FETCH_TIMEOUT=60000 \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_PROGRESS=false
 
-# Install deps first for cache efficiency. `npm ci` requires package-lock.json
-# to be in sync — keeps supply chain reproducible.
+# Install deps first for layer-cache efficiency. `npm ci` requires
+# package-lock.json to be in sync — keeps the supply chain reproducible.
+# (No BuildKit `--mount` cache so this builds on the classic engine too — some
+# hosts don't enable BuildKit, and "deploy anywhere" matters more than a warm
+# npm cache.)
 COPY package.json package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm \
-    if [ -f package-lock.json ]; then \
+RUN if [ -f package-lock.json ]; then \
       npm ci --prefer-offline --no-audit --no-fund --no-progress; \
     else \
       npm install --prefer-offline --no-audit --no-fund --no-progress; \
