@@ -70,17 +70,29 @@ function isDailyQuota(reason, message) {
 }
 
 /**
+ * The key is restricted to specific HTTP referrers but the server isn't sending
+ * a matching one — the #1 "API access denied" cause for self-hosters on a custom
+ * domain. Google says "Requests from referer <…> are blocked".
+ */
+function isRefererBlocked(reason, message) {
+  if (reason === 'ipRefererBlocked' || reason === 'API_KEY_HTTP_REFERRER_BLOCKED') return true;
+  const m = (message || '').toLowerCase();
+  return m.includes('referer') && m.includes('block');
+}
+
+/**
  * Map Google API errors to user-friendly messages.
  */
 function friendlyMessageFor(status, reason, message) {
   if (isDailyQuota(reason, message)) {
-    return 'Daily search quota for this API key is used up. It resets at midnight Pacific — add more keys to GOOGLE_API_KEYS to raise the ceiling.';
+    return 'Daily search quota for this API key is used up. It resets at midnight Pacific — add keys from OTHER Google projects to GOOGLE_API_KEYS to raise the ceiling.';
+  }
+  if (isRefererBlocked(reason, message)) {
+    return 'This API key is locked to specific HTTP referrers. On the server, set GOOGLE_API_REFERER in .env to a matching referrer (your site URL, e.g. https://your.domain) and restart — or remove the key\'s referrer restriction in Google Cloud Console.';
   }
   if (status === 403) {
     if (reason === 'keyInvalid' || reason === 'keyExpired')
       return 'API access denied. The server admin needs to check the API key.';
-    if (reason === 'ipRefererBlocked')
-      return 'API key has a referrer/IP restriction that blocks this server.';
     return 'API access denied. The server admin needs to check the API key.';
   }
   if (status === 429) return 'Too many requests for a moment. Try again shortly.';
