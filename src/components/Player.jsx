@@ -2,11 +2,32 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, Tooltip, IconButton } from '@mui/material';
 import {
   PlayArrow, Pause, VolumeUp, VolumeOff, Fullscreen, FullscreenExit,
-  PictureInPictureAlt, Replay, OpenInNew,
+  PictureInPictureAlt, Replay, OpenInNew, Settings, ClosedCaption,
 } from '@mui/icons-material';
 import { loadYouTubeIframeAPI } from '../services/youtubeApi.js';
 
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
+
+// Readable label for YouTube's quality level ids.
+const QUALITY_LABELS = {
+  highres: '4320p', hd2880: '2880p', hd2160: '2160p', hd1440: '1440p',
+  hd1080: '1080p', hd720: '720p', large: '480p', medium: '360p',
+  small: '240p', tiny: '144p', auto: 'Auto', default: 'Auto',
+};
+const qualityLabel = (q) => QUALITY_LABELS[q] || q;
+
+// Captions module name differs across player versions ('captions' vs 'cc').
+function ccGet(p, opt) {
+  for (const mod of ['captions', 'cc']) {
+    try { const v = p.getOption(mod, opt); if (v !== undefined && v !== null) return v; } catch { /* ignore */ }
+  }
+  return undefined;
+}
+function ccSet(p, opt, val) {
+  for (const mod of ['captions', 'cc']) {
+    try { p.setOption(mod, opt, val); } catch { /* ignore */ }
+  }
+}
 
 // YT.PlayerState constants — defined explicitly because YT.PlayerState
 // isn't always available at module-load time.
@@ -52,6 +73,15 @@ export default function Player({ videoId }) {
   const [active, setActive] = useState(true); // overlay visibility
   const [error, setError] = useState(null);
 
+  // Settings menu (speed / quality / captions)
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [rate, setRate] = useState(1);
+  const [rates, setRates] = useState([1]);
+  const [qualities, setQualities] = useState([]);
+  const [quality, setQuality] = useState('auto');
+  const [ccTracks, setCcTracks] = useState([]);
+  const [ccLang, setCcLang] = useState(null); // null = off
+
   const safeId = videoId && VIDEO_ID_RE.test(videoId) ? videoId : '';
 
   // ---- Initialize YT player ------------------------------------------------
@@ -78,6 +108,20 @@ export default function Player({ videoId }) {
     loadYouTubeIframeAPI()
       .then((YT) => {
         if (cancelled) return;
+
+        // Quality levels + caption tracklists only populate once playback
+        // starts, so this is called on onReady AND the first PLAYING event.
+        const readDynamicOptions = () => {
+          if (!p) return;
+          try { setQualities(p.getAvailableQualityLevels?.() || []); setQuality(p.getPlaybackQuality?.() || 'auto'); } catch { /* ignore */ }
+          try {
+            const tl = ccGet(p, 'tracklist');
+            if (Array.isArray(tl)) setCcTracks(tl);
+            const cur = ccGet(p, 'track');
+            setCcLang(cur && cur.languageCode ? cur.languageCode : null);
+          } catch { /* ignore */ }
+        };
+
         p = new YT.Player(mount, {
           videoId: safeId,
           // Standard host (not nocookie): the privacy host is bot-walled more
@@ -103,6 +147,8 @@ export default function Player({ videoId }) {
               const sv = loadVol();
               if (sv != null) { p.setVolume(sv); setVolume(sv); } else { setVolume(p.getVolume()); }
               if (loadMuted()) { p.mute(); setMuted(true); } else { setMuted(p.isMuted()); }
+              try { setRates(p.getAvailablePlaybackRates() || [1]); setRate(p.getPlaybackRate() || 1); } catch { /* ignore */ }
+              readDynamicOptions();
             },
             onStateChange: (e) => {
               if (cancelled) return;
@@ -111,6 +157,7 @@ export default function Player({ videoId }) {
               if (e.data === STATE.PLAYING || e.data === STATE.PAUSED) {
                 setDuration(p.getDuration() || 0);
               }
+              if (e.data === STATE.PLAYING) readDynamicOptions();
             },
             onError: (e) => {
               if (cancelled) return;
@@ -169,10 +216,10 @@ export default function Player({ videoId }) {
   const poke = useCallback(() => {
     setActive(true);
     clearTimeout(hideTimerRef.current);
-    if (playerRef.current && playing) {
+    if (playerRef.current && playing && !settingsOpen) {
       hideTimerRef.current = setTimeout(() => setActive(false), 2500);
     }
-  }, [playing]);
+  }, [playing, settingsOpen]);
 
   useEffect(() => { poke(); }, [poke, playing]);
 
@@ -287,6 +334,22 @@ export default function Player({ videoId }) {
     }
   };
 
+  // ---- Settings (speed / quality / captions) -------------------------------
+  const applyRate = (r) => {
+    const p = playerRef.current; if (!p) return;
+    try { p.setPlaybackRate(r); setRate(r); } catch { /* ignore */ }
+  };
+  const applyQuality = (q) => {
+    const p = playerRef.current; if (!p) return;
+    // setPlaybackQuality is best-effort — modern YouTube often auto-manages it.
+    try { p.setPlaybackQuality(q); setQuality(q); } catch { /* ignore */ }
+  };
+  const applyCaption = (lang) => {
+    const p = playerRef.current; if (!p) return;
+    if (lang == null) { ccSet(p, 'track', {}); setCcLang(null); }
+    else { p.loadModule?.('captions'); ccSet(p, 'track', { languageCode: lang }); setCcLang(lang); }
+  };
+
   const togglePip = async () => {
     // PiP requires the YouTube embed to be in a state where it exposes the
     // underlying <video> element. YT's iframe sandboxes that; we offer this
@@ -378,6 +441,49 @@ export default function Player({ videoId }) {
           </Box>
         )}
 
+        {/* Settings panel — rendered INSIDE the player wrap so it shows in
+            fullscreen too (an MUI Menu would portal to body and vanish). */}
+        {settingsOpen && (
+          <div className="player-settings" role="menu" aria-label="Player settings">
+            <div className="ps-section">
+              <div className="ps-title">Speed</div>
+              <div className="ps-options">
+                {rates.map((r) => (
+                  <button key={r} className={`ps-opt ${r === rate ? 'is-active' : ''}`} onClick={() => applyRate(r)}>
+                    {r === 1 ? 'Normal' : `${r}×`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {qualities.length > 0 && (
+              <div className="ps-section">
+                <div className="ps-title">Quality</div>
+                <div className="ps-options">
+                  {['auto', ...qualities.filter((q) => q !== 'auto' && q !== 'default')].map((q) => (
+                    <button key={q} className={`ps-opt ${q === quality ? 'is-active' : ''}`} onClick={() => applyQuality(q)}>
+                      {qualityLabel(q)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="ps-section">
+              <div className="ps-title">Subtitles / CC</div>
+              <div className="ps-options">
+                <button className={`ps-opt ${ccLang == null ? 'is-active' : ''}`} onClick={() => applyCaption(null)}>Off</button>
+                {ccTracks.map((t) => (
+                  <button key={(t.languageCode || '') + (t.vss_id || t.displayName || '')}
+                    className={`ps-opt ${t.languageCode === ccLang ? 'is-active' : ''}`}
+                    onClick={() => applyCaption(t.languageCode)}>
+                    {t.displayName || t.languageName || t.languageCode}
+                  </button>
+                ))}
+                {ccTracks.length === 0 && <span className="ps-empty">none for this video</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Bottom control row */}
         <Box className="player-controls">
           <Tooltip title={`${playing ? 'Pause' : 'Play'} · space`}>
@@ -421,6 +527,20 @@ export default function Player({ videoId }) {
 
           <Box sx={{ flex: 1 }} />
 
+          {ccTracks.length > 0 && (
+            <Tooltip title={ccLang ? 'Subtitles on' : 'Subtitles'}>
+              <button className="player-btn" onClick={() => applyCaption(ccLang ? null : (ccTracks[0]?.languageCode))}
+                aria-label="Toggle subtitles" data-active={Boolean(ccLang)}>
+                <ClosedCaption fontSize="small" />
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip title="Settings (speed · quality · captions)">
+            <button className="player-btn" onClick={() => setSettingsOpen((v) => !v)}
+              aria-label="Settings" data-active={settingsOpen}>
+              <Settings fontSize="small" />
+            </button>
+          </Tooltip>
           <Tooltip title="Picture-in-picture (opens YouTube)">
             <button className="player-btn" onClick={togglePip} aria-label="Picture-in-picture">
               <PictureInPictureAlt fontSize="small" />

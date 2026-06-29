@@ -48,8 +48,9 @@ export default function VideoCard({ video }) {
           )}
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography
+              className="card-title"
               sx={{
-                color: 'var(--c-text)',
+                color: 'var(--c-text-strong)',
                 fontWeight: 600,
                 fontSize: 14,
                 lineHeight: 1.3,

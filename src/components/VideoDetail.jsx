@@ -3,7 +3,7 @@ import { Avatar, Box, Chip, IconButton, Snackbar, Stack, Tooltip, Typography } f
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowBack, CheckCircle, FavoriteOutlined, MarkChatRead, Visibility,
-  ContentCopy, OpenInNew, Share, ExpandMore, ExpandLess,
+  ContentCopy, OpenInNew, Share, ExpandMore, ExpandLess, ViewSidebar,
 } from '@mui/icons-material';
 import Player from './Player.jsx';
 import { Loader, ErrorPanel } from './Loader.jsx';
@@ -38,6 +38,14 @@ export default function VideoDetail() {
 
   const [descExpanded, setDescExpanded] = useState(false);
   const [snack, setSnack] = useState({ open: false, msg: '' });
+  const [showRelated, setShowRelated] = useState(() => {
+    try { return localStorage.getItem('sectube.showRelated') !== '0'; } catch { return true; }
+  });
+  const toggleRelated = () => setShowRelated((v) => {
+    const n = !v;
+    try { localStorage.setItem('sectube.showRelated', n ? '1' : '0'); } catch { /* ignore */ }
+    return n;
+  });
 
   if (!safeId) return <ErrorPanel error={{ message: 'Invalid video id.' }} />;
   if (videoLoading) return <Box className="page" sx={{ pt: 3 }}><Loader count={4} /></Box>;
@@ -87,10 +95,13 @@ export default function VideoDetail() {
       </Stack>
 
       <Box display="flex" sx={{ flexDirection: { xs: 'column', lg: 'row' }, gap: 3 }}>
-        <Box sx={{ flex: { lg: '0 0 70%' }, minWidth: 0 }}>
+        {/* Player column absorbs slack (flex 1 1 0); the related column is a
+            fixed width. Previously both used non-shrinking % bases that summed
+            past 100% + gap, pushing the related titles off the right edge. */}
+        <Box sx={{ flex: { lg: '1 1 0' }, minWidth: 0 }}>
           <Player videoId={safeId} />
 
-          <Typography variant="h5" sx={{ mt: 2, color: 'var(--c-primary)' }}>
+          <Typography variant="h5" sx={{ mt: 2, color: 'var(--c-text-strong)', fontWeight: 700 }}>
             {snippet.title}
           </Typography>
 
@@ -110,6 +121,13 @@ export default function VideoDetail() {
 
             <Box sx={{ flex: 1 }} />
 
+            <Tooltip title={showRelated ? 'Hide related' : 'Show related'}>
+              <IconButton size="small" onClick={toggleRelated}
+                aria-label={showRelated ? 'Hide related videos' : 'Show related videos'} aria-pressed={showRelated}
+                sx={{ border: '1px solid var(--c-border)', color: showRelated ? 'var(--c-primary)' : 'var(--c-text-dim)' }}>
+                <ViewSidebar fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Copy link">
               <IconButton size="small" onClick={copyLink} aria-label="Copy link"
                 sx={{ border: '1px solid var(--c-border)' }}>
@@ -192,7 +210,8 @@ export default function VideoDetail() {
           </Box>
         </Box>
 
-        <Box sx={{ flex: { lg: '0 0 32%' }, minWidth: 0 }}>
+        {showRelated && (
+        <Box sx={{ flex: { lg: '0 0 360px' }, minWidth: 0 }}>
           <Stack direction="row" alignItems="baseline" gap={1} sx={{ mb: 1.25 }}>
             <Typography variant="overline" sx={{ color: 'var(--c-text-faint)', letterSpacing: '0.18em' }}>
               {'// related'}
@@ -241,8 +260,8 @@ export default function VideoDetail() {
                         sx={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }} />
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0, p: { xs: 1, lg: 0 } }}>
-                      <Typography sx={{
-                        color: 'var(--c-text)', fontSize: 13, fontWeight: 600, lineHeight: 1.3,
+                      <Typography className="card-title" sx={{
+                        color: 'var(--c-text-strong)', fontSize: 13, fontWeight: 600, lineHeight: 1.3,
                         display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                       }}>
                         {it.snippet.title}
@@ -262,6 +281,7 @@ export default function VideoDetail() {
             })}
           </Box>
         </Box>
+        )}
       </Box>
 
       <Snackbar

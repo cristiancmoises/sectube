@@ -30,7 +30,7 @@ export default function ChannelCard({ video, marginTop }) {
             }}
           />
           <Stack direction="row" gap={0.5} alignItems="center">
-            <Typography variant="h6" sx={{ color: 'var(--c-text)' }}>
+            <Typography variant="h6" className="card-title" sx={{ color: 'var(--c-text-strong)' }}>
               {snippet.title}
             </Typography>
             <CheckCircle sx={{ fontSize: 14, color: 'var(--c-text-faint)' }} />

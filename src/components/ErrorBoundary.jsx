@@ -13,18 +13,18 @@ export default class ErrorBoundary extends Component {
       <Box sx={{
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        bgcolor: '#000', color: '#ff4081', p: 4, gap: 2, fontFamily: 'var(--mono)',
+        bgcolor: 'var(--c-bg)', color: 'var(--c-error)', p: 4, gap: 2, fontFamily: 'var(--mono)',
       }}>
-        <Typography variant="overline" sx={{ color: '#ff4081', letterSpacing: '0.2em' }}>
+        <Typography variant="overline" sx={{ color: 'var(--c-error)', letterSpacing: '0.2em' }}>
           {'>'} FATAL
         </Typography>
-        <Typography variant="h5" sx={{ color: '#ff4081' }}>Something broke.</Typography>
-        <Typography variant="body2" sx={{ color: '#ff79b0', maxWidth: 480, textAlign: 'center' }}>
+        <Typography variant="h5" sx={{ color: 'var(--c-error)' }}>Something broke.</Typography>
+        <Typography variant="body2" sx={{ color: 'var(--c-text-dim)', maxWidth: 480, textAlign: 'center' }}>
           The app hit an unexpected error. Try reloading the page or click below to recover.
         </Typography>
         <Button variant="outlined" onClick={this.reset} sx={{
-          borderColor: '#ff4081', color: '#ff4081',
-          '&:hover': { borderColor: '#ff79b0', background: 'rgba(255,64,129,0.08)' },
+          borderColor: 'var(--c-error)', color: 'var(--c-error)',
+          '&:hover': { borderColor: 'var(--c-error)', background: 'var(--c-primary-faint)' },
         }}>
           Try again
         </Button>

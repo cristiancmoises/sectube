@@ -7,11 +7,11 @@ export function SkeletonGrid({ count = 8 }) {
       {Array.from({ length: count }).map((_, i) => (
         <Box key={i}>
           <div className="skeleton" style={{ width: '100%', aspectRatio: '16/9' }} />
-          <Box sx={{ mt: 1.5, display: 'flex', gap: 1 }}>
+          <Box sx={{ p: 1.25, display: 'flex', gap: 1.25 }}>
             <div className="skeleton" style={{ width: 32, height: 32, borderRadius: '50%', flex: '0 0 auto' }} />
-            <Box sx={{ flex: 1 }}>
-              <div className="skeleton" style={{ width: '85%', height: 14 }} />
-              <div className="skeleton" style={{ width: '50%', height: 12, marginTop: 6 }} />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <div className="skeleton" style={{ width: '90%', height: 14 }} />
+              <div className="skeleton" style={{ width: '55%', height: 12, marginTop: 8 }} />
             </Box>
           </Box>
         </Box>
@@ -54,7 +54,7 @@ export function FeedStatus({ loading, error, exhausted, count, onRetry }) {
     return (
       <Stack direction="row" justifyContent="center" sx={{ mt: 3 }}>
         <Button variant="outlined" color="inherit" onClick={onRetry}
-          sx={{ borderColor: '#ff4081', color: '#ff4081' }}>
+          sx={{ borderColor: 'var(--c-error)', color: 'var(--c-error)' }}>
           Failed to load more — retry
         </Button>
       </Stack>

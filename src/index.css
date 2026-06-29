@@ -17,8 +17,10 @@
   --c-border:    rgba(0, 229, 255, 0.20);
   --c-border-hi: rgba(0, 229, 255, 0.50);
   --c-text:      #00e5ff;
+  --c-text-strong:#d6f7ff;
   --c-text-dim:  #4dd0e1;
   --c-text-faint:#5a7d85;
+  --c-skeleton-hi:rgba(0, 229, 255, 0.16);
   --c-error:     #ff4081;
   --glow:        0 0 12px rgba(0, 229, 255, 0.45);
   --glow-soft:   0 0 6px rgba(0, 229, 255, 0.30);
@@ -35,8 +37,10 @@
   --c-border:    rgba(255, 59, 59, 0.22);
   --c-border-hi: rgba(255, 59, 59, 0.55);
   --c-text:      #ff3b3b;
+  --c-text-strong:#ffe0e0;
   --c-text-dim:  #ff9b9b;
   --c-text-faint:#6b3a3a;
+  --c-skeleton-hi:rgba(255, 59, 59, 0.16);
   --c-error:     #ffaf00;
   --glow:        0 0 12px rgba(255, 59, 59, 0.50);
   --glow-soft:   0 0 6px rgba(255, 59, 59, 0.30);
@@ -53,8 +57,10 @@
   --c-border:    rgba(255, 110, 199, 0.25);
   --c-border-hi: rgba(255, 110, 199, 0.55);
   --c-text:      #ff6ec7;
+  --c-text-strong:#ffe3f4;
   --c-text-dim:  #a86bff;
   --c-text-faint:#6a4a8a;
+  --c-skeleton-hi:rgba(255, 110, 199, 0.16);
   --c-error:     #ffd166;
   --glow:        0 0 14px rgba(255, 110, 199, 0.55);
   --glow-soft:   0 0 7px rgba(255, 110, 199, 0.35);
@@ -71,8 +77,10 @@
   --c-border:    rgba(0, 255, 102, 0.20);
   --c-border-hi: rgba(0, 255, 102, 0.55);
   --c-text:      #00ff66;
+  --c-text-strong:#d8ffe6;
   --c-text-dim:  #7fffb8;
   --c-text-faint:#3a6b4a;
+  --c-skeleton-hi:rgba(0, 255, 102, 0.16);
   --c-error:     #ff4081;
   --glow:        0 0 12px rgba(0, 255, 102, 0.50);
   --glow-soft:   0 0 6px rgba(0, 255, 102, 0.30);
@@ -89,8 +97,10 @@
   --c-border:    rgba(255, 255, 255, 0.18);
   --c-border-hi: rgba(255, 255, 255, 0.45);
   --c-text:      #ffffff;
-  --c-text-dim:  #999999;
-  --c-text-faint:#666666;
+  --c-text-strong:#ffffff;
+  --c-text-dim:  #b8b8b8;
+  --c-text-faint:#777777;
+  --c-skeleton-hi:rgba(255, 255, 255, 0.18);
   --c-error:     #ff4081;
   --glow:        none;
   --glow-soft:   none;
@@ -196,7 +206,7 @@ a:focus-visible, button:focus-visible {
   100% { background-position: 200% 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, var(--c-primary-faint) 0%, rgba(255,255,255,0.10) 50%, var(--c-primary-faint) 100%);
+  background: linear-gradient(90deg, var(--c-primary-faint) 0%, var(--c-skeleton-hi) 50%, var(--c-primary-faint) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
   border-radius: 4px;
@@ -229,6 +239,12 @@ a:focus-visible, button:focus-visible {
   border-color: var(--c-border-hi);
   transform: translateY(-2px);
   box-shadow: var(--glow-soft);
+}
+/* Titles rest near-white for readability and flash to the accent on hover. */
+.card-title { transition: color 140ms ease; }
+.card-link:hover .card-title { color: var(--c-primary-hi); }
+@media (prefers-reduced-motion: reduce) {
+  .card-link:hover { transform: none; }
 }
 
 /* --- Player & embed ------------------------------------------------------- */
@@ -365,6 +381,50 @@ a:focus-visible, button:focus-visible {
   border-radius: 2px;
 }
 
+/* --- Player settings panel (speed / quality / captions) ------------------ */
+.player-settings {
+  position: absolute;
+  right: 12px;
+  bottom: 58px;
+  z-index: 5;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  max-width: min(320px, 80%);
+  max-height: 62%;
+  overflow-y: auto;
+  backdrop-filter: blur(6px);
+  box-shadow: var(--glow-soft);
+}
+.ps-section { margin-bottom: 10px; }
+.ps-section:last-child { margin-bottom: 0; }
+.ps-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+  margin-bottom: 6px;
+}
+.ps-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.ps-opt {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-text);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  white-space: nowrap;
+}
+.ps-opt:hover { border-color: var(--c-border-hi); background: var(--c-primary-faint); }
+.ps-opt.is-active { background: var(--c-primary); color: #000; border-color: var(--c-primary); }
+.ps-empty { font-size: 11px; color: var(--c-text-faint); font-family: var(--mono); }
+
 /* --- YouTube iframe basic (used when not custom-player) ------------------ */
 .yt-embed {
   aspect-ratio: 16 / 9;
@@ -377,6 +437,16 @@ a:focus-visible, button:focus-visible {
 
 /* --- Mono chips, duration badges, kbd hints ------------------------------- */
 .mono-chip { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; color: var(--c-text-dim); }
+.tag-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--c-text-dim);
+  border: 1px solid var(--c-border);
+  padding: 2px 8px;
+  border-radius: 3px;
+  align-self: center;
+  white-space: nowrap;
+}
 .duration-badge {
   position: absolute;
   right: 6px; bottom: 6px;

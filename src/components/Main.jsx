@@ -33,22 +33,15 @@ export default function Main() {
     <>
       <Category selected={selectedCategory} onSelect={setSelectedCategory} />
       <Box className="page" sx={{ pt: 3 }}>
-        <Stack direction="row" gap={1} alignItems="baseline" sx={{ mb: 2.5, flexWrap: 'wrap' }}>
+        <Stack direction="row" gap={1} alignItems="baseline"
+          sx={{ mb: 2.5, pb: 1.25, borderBottom: '1px solid var(--c-border)', flexWrap: 'wrap' }}>
           <Typography variant="overline" sx={{ color: 'var(--c-text-faint)', letterSpacing: '0.18em' }}>
             {'// feed'}
           </Typography>
           <Typography variant="h4" sx={{ color: 'var(--c-primary)' }}>
             {selectedCategory}
           </Typography>
-          <span className="mono-chip" style={{
-            border: '1px solid var(--c-border)',
-            padding: '2px 8px',
-            borderRadius: 3,
-            alignSelf: 'center',
-            marginLeft: 4,
-          }}>
-            {region}
-          </span>
+          <span className="tag-chip" style={{ marginLeft: 4 }}>{region}</span>
         </Stack>
 
         {initialLoading && <Loader count={12} />}

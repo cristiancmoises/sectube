@@ -16,8 +16,12 @@ export default function Navbar() {
       <Stack direction="row" alignItems="center" justifyContent="space-between"
         sx={{ px: { xs: 2, md: 3 }, py: 1.5, gap: { xs: 1, md: 1.5 }, maxWidth: 1500, mx: 'auto' }}>
         <Brand />
-        <SearchBar />
-        <Stack direction="row" gap={0.5} alignItems="center">
+        {/* Inline search on desktop only; on mobile it moves to its own row
+            below (it's unusable squeezed between the brand and the icons). */}
+        <Box sx={{ display: { xs: 'none', md: 'contents' } }}>
+          <SearchBar />
+        </Box>
+        <Stack direction="row" gap={0.5} alignItems="center" sx={{ flex: '0 0 auto' }}>
           <RegionPicker />
           <ThemePicker />
           <Tooltip title="Source on GitHub" enterDelay={500}>
@@ -34,6 +38,11 @@ export default function Navbar() {
           </Tooltip>
         </Stack>
       </Stack>
+
+      {/* Full-width mobile search row */}
+      <Box sx={{ display: { xs: 'block', md: 'none' }, px: 2, pb: 1.5 }}>
+        <SearchBar />
+      </Box>
     </Box>
   );
 }
