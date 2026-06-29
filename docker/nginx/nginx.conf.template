@@ -9,11 +9,19 @@
 limit_req_zone $binary_remote_addr zone=api_zone:10m rate=10r/s;
 limit_req_status 429;
 
-# Runtime DNS resolution for upstream. Variable in proxy_pass forces resolve
-# at request time (via this `resolver`) instead of at config-parse time —
-# survives DNS hiccups without crashing on boot.
-resolver ${NGINX_RESOLVERS} valid=60s ipv6=off;
-resolver_timeout 5s;
+# Upstream to Google, resolved ONCE at boot via the system resolver (libc /
+# /etc/resolv.conf). We deliberately do NOT use a runtime `resolver` + variable
+# proxy_pass here: on locked-down networks (Tor/VPN) nginx's own resolver to a
+# public DNS often times out per-request, while libc name resolution at boot
+# works fine. Keepalive reuses the TLS connection across requests.
+upstream yt_api_upstream {
+    server ${GOOGLE_API_HOST}:443 max_fails=0;
+    keepalive 16;
+}
+
+# Kept for completeness; not used by the upstream above.
+resolver ${NGINX_RESOLVERS} valid=300s ipv6=off;
+resolver_timeout 10s;
 
 server {
     listen ${SERVER_PORT} default_server;
@@ -58,22 +66,26 @@ server {
     location ~ ^/__yt/(?<yt_path>.*)$ {
         internal;
 
-        # $upstream_host as a variable forces runtime DNS resolution.
-        set $upstream_host "${GOOGLE_API_HOST}";
-        proxy_pass https://$upstream_host/youtube/v3/$yt_path$is_args$args;
+        # Use the boot-resolved upstream group (no per-request DNS). Literal SNI
+        # + Host keep TLS verification and routing correct.
+        proxy_pass https://yt_api_upstream/youtube/v3/$yt_path$is_args$args;
 
         proxy_ssl_server_name on;
-        proxy_ssl_name $upstream_host;
+        proxy_ssl_name ${GOOGLE_API_HOST};
         proxy_ssl_verify on;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 
         # Minimal headers. Google authenticates via the key in the URL.
-        proxy_set_header Host $upstream_host;
+        proxy_set_header Host ${GOOGLE_API_HOST};
         proxy_set_header Accept "application/json";
         proxy_set_header Accept-Encoding "";
         proxy_set_header User-Agent "sectube/4.0";
         proxy_set_header Cookie "";
         proxy_set_header Authorization "";
+        # Referer for API keys restricted to an HTTP referrer. Empty by default
+        # (works with unrestricted/IP-restricted keys). Set GOOGLE_API_REFERER to
+        # the key's allowed referrer (e.g. http://localhost:8090) otherwise.
+        proxy_set_header Referer "${GOOGLE_API_REFERER}";
 
         proxy_connect_timeout 5s;
         proxy_send_timeout 10s;
