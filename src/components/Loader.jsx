@@ -24,25 +24,19 @@ export function Loader({ count = 8 }) { return <SkeletonGrid count={count} />; }
 
 export function ErrorPanel({ error, onRetry }) {
   const msg = error?.message || 'Something went wrong.';
-  const isKeyIssue = error?.status === 401 || error?.status === 403;
   return (
     <Box sx={{ py: 6, px: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <Stack spacing={2} alignItems="center" maxWidth={520}>
-        <Typography variant="overline" sx={{ color: '#ff4081', letterSpacing: '0.18em' }}>
+      <Stack spacing={2} alignItems="center" maxWidth={560}>
+        <Typography variant="overline" sx={{ color: 'var(--c-error)', letterSpacing: '0.18em' }}>
           {'>'} ERROR
         </Typography>
-        <Typography variant="h6" sx={{ color: '#ff4081', textAlign: 'center', fontFamily: 'var(--mono)' }}>
+        <Typography variant="h6" sx={{ color: 'var(--c-error)', textAlign: 'center', fontFamily: 'var(--mono)', lineHeight: 1.5 }}>
           {msg}
         </Typography>
-        {isKeyIssue && (
-          <Typography variant="body2" sx={{ color: 'var(--c-text-dim)', textAlign: 'center', maxWidth: 420 }}>
-            The site admin needs to set <code>GOOGLE_API_KEY</code> in <code>.env</code> and restart the container.
-          </Typography>
-        )}
         {onRetry && (
           <Button variant="outlined" color="inherit" onClick={onRetry}
-            sx={{ borderColor: '#ff4081', color: '#ff4081',
-                  '&:hover': { borderColor: '#ff79b0', background: 'rgba(255,64,129,0.08)' } }}>
+            sx={{ borderColor: 'var(--c-error)', color: 'var(--c-error)',
+                  '&:hover': { borderColor: 'var(--c-error)', background: 'var(--c-primary-faint)' } }}>
             Retry
           </Button>
         )}
