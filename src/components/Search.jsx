@@ -40,7 +40,8 @@ export default function Search() {
 
   return (
     <Box className="page" sx={{ pt: 3 }}>
-      <Stack direction="row" gap={1} alignItems="baseline" sx={{ mb: 2.5, flexWrap: 'wrap' }}>
+      <Stack direction="row" gap={1} alignItems="baseline"
+        sx={{ mb: 2.5, pb: 1.25, borderBottom: '1px solid var(--c-border)', flexWrap: 'wrap' }}>
         <Typography variant="overline" sx={{ color: 'var(--c-text-faint)', letterSpacing: '0.18em' }}>
           {'// search'}
         </Typography>
