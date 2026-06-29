@@ -16,7 +16,7 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/roboto": "^5.1.0",
     "@mui/icons-material": "^6.1.6",
-    "@mui/material": "^6.1.6",
+    "@mui/material": "^9.1.2",
     "axios": "^1.17.0",
     "dayjs": "^1.11.21",
     "dompurify": "^3.4.9",
