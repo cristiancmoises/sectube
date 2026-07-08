@@ -13,7 +13,7 @@
 # Either way, `dist/` must exist before `docker compose build`.
 # For the full in-image build, use Dockerfile.full-build instead.
 # =========================================================================
-FROM openresty/openresty:1.27.1.2-alpine
+FROM openresty/openresty:1.31.1.1-alpine
 
 # ca-certificates: required so the rotator can verify Google's TLS cert
 # (proxy_ssl_verify on). This is the only build-time network dependency.
