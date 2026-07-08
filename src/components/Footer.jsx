@@ -11,7 +11,7 @@ export default function Footer() {
       <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} alignItems="center" justifyContent="space-between"
         sx={{ maxWidth: 1500, mx: 'auto' }}>
         <Typography variant="overline" sx={{ color: 'var(--c-text-faint)', letterSpacing: '0.16em' }}>
-          SecTube · v3 · powered by YouTube Data API v3
+          SecTube · v4 · powered by YouTube Data API v3
         </Typography>
         <Typography variant="overline" sx={{ color: 'var(--c-text-faint)', letterSpacing: '0.16em' }}>
           no login · no tracking · no ads
