@@ -21,7 +21,7 @@
     "dayjs": "^1.11.23",
     "dompurify": "^3.4.14",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react-dom": "^19.2.8",
     "react-router-dom": "^6.30.4"
   },
   "devDependencies": {
